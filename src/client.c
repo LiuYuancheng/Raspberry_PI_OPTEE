@@ -7,28 +7,27 @@
 #define MAX 80 
 #define PORT 5005 
 #define SA struct sockaddr 
-void func(int sockfd) 
+int func(int sockfd) 
 {
 	char buff[MAX]; 
-	int n; 
-	for (;;) {
-		printf("wait for server response\n");
-		bzero(buff, sizeof(buff)); 
-		printf("Enter the string : \n"); 
-		n = 0; 
-		buff[0] = 'F';
-		buff[1] = 'D';
-		sleep(1);
-		write(sockfd, buff, sizeof(buff)); 
-		bzero(buff, sizeof(buff)); 
-		read(sockfd, buff, sizeof(buff));
-		printf("From Server : %d", atoi(buff)); 
-	} 
+	int n;
+	printf("wait for server response\n");
+	bzero(buff, sizeof(buff)); 
+	printf("Enter the string : \n"); 
+	n = 0; 
+	buff[0] = 'F';
+	buff[1] = 'D';
+	sleep(1);
+	write(sockfd, buff, sizeof(buff)); 
+	bzero(buff, sizeof(buff)); 
+	read(sockfd, buff, sizeof(buff));
+	return atoi(buff); 
 } 
 
 int main() 
 { 
-	int sockfd, connfd; 
+	int sockfd, connfd;
+	int num; 
 	struct sockaddr_in servaddr, cli; 
 
 	// socket create and varification 
@@ -54,10 +53,13 @@ int main()
 	else
 		printf("connected to the server..\n"); 
 	
-	printf("sss\n");
 	// function for chat 
-	func(sockfd); 
-	printf("xxxxxxxxxxx");
+	num = func(sockfd);
+	printf("The challenge numer is %d \n", num);
+	char replay[10];
+	sprintf(replay, "%d", num);
+	write(sockfd, replay, sizeof(replay)); 
+
 	// close the socket 
 	close(sockfd); 
 } 
