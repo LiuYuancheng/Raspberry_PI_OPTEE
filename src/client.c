@@ -1,60 +1,64 @@
-// Server side C/C++ program to demonstrate Socket programming 
-#include <unistd.h> 
+// Write CPP code here 
+#include <netdb.h> 
 #include <stdio.h> 
-#include <sys/socket.h> 
 #include <stdlib.h> 
-#include <netinet/in.h> 
 #include <string.h> 
-#define PORT 8080 
-int main(int argc, char const *argv[]) 
+#include <sys/socket.h> 
+#define MAX 80 
+#define PORT 5005 
+#define SA struct sockaddr 
+void func(int sockfd) 
+{
+	char buff[MAX]; 
+	int n; 
+	for (;;) {
+		printf("wait for server response\n");
+		bzero(buff, sizeof(buff)); 
+		printf("Enter the string : \n"); 
+		n = 0; 
+		buff[0] = 'F';
+		buff[1] = 'D';
+		sleep(1);
+		write(sockfd, buff, sizeof(buff)); 
+		bzero(buff, sizeof(buff)); 
+		read(sockfd, buff, sizeof(buff));
+		printf("From Server : %d", atoi(buff)); 
+	} 
+} 
+
+int main() 
 { 
-	int server_fd, new_socket, valread; 
-	struct sockaddr_in address; 
-	int opt = 1; 
-	int addrlen = sizeof(address); 
-	char buffer[1024] = {0}; 
-	char *hello = "Hello from server"; 
+	int sockfd, connfd; 
+	struct sockaddr_in servaddr, cli; 
+
+	// socket create and varification 
+	sockfd = socket(AF_INET, SOCK_STREAM, 0); 
+	if (sockfd == -1) { 
+		printf("socket creation failed...\n"); 
+		exit(0); 
+	} 
+	else
+		printf("Socket successfully created..\n"); 
+	bzero(&servaddr, sizeof(servaddr)); 
+
+	// assign IP, PORT 
+	servaddr.sin_family = AF_INET; 
+	servaddr.sin_addr.s_addr = inet_addr("127.0.0.1"); 
+	servaddr.sin_port = htons(PORT); 
+
+	// connect the client socket to server socket 
+	if (connect(sockfd, (SA*)&servaddr, sizeof(servaddr)) != 0) { 
+		printf("connection with the server failed...\n"); 
+		exit(0); 
+	} 
+	else
+		printf("connected to the server..\n"); 
 	
-	// Creating socket file descriptor 
-	if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) 
-	{ 
-		perror("socket failed"); 
-		exit(EXIT_FAILURE); 
-	} 
-	
-	// Forcefully attaching socket to the port 8080 
-	if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, 
-												&opt, sizeof(opt))) 
-	{ 
-		perror("setsockopt"); 
-		exit(EXIT_FAILURE); 
-	} 
-	address.sin_family = AF_INET; 
-	address.sin_addr.s_addr = INADDR_ANY; 
-	address.sin_port = htons( PORT ); 
-	
-	// Forcefully attaching socket to the port 8080 
-	if (bind(server_fd, (struct sockaddr *)&address, 
-								sizeof(address))<0) 
-	{ 
-		perror("bind failed"); 
-		exit(EXIT_FAILURE); 
-	} 
-	if (listen(server_fd, 3) < 0) 
-	{ 
-		perror("listen"); 
-		exit(EXIT_FAILURE); 
-	} 
-	if ((new_socket = accept(server_fd, (struct sockaddr *)&address, 
-					(socklen_t*)&addrlen))<0) 
-	{ 
-		perror("accept"); 
-		exit(EXIT_FAILURE); 
-	} 
-	valread = read( new_socket , buffer, 1024); 
-	printf("%s\n",buffer ); 
-	send(new_socket , hello , strlen(hello) , 0 ); 
-	printf("Hello message sent\n"); 
-	return 0; 
+	printf("sss\n");
+	// function for chat 
+	func(sockfd); 
+	printf("xxxxxxxxxxx");
+	// close the socket 
+	close(sockfd); 
 } 
 
