@@ -1,0 +1,16 @@
+host/hello_world
+GPATH
+GRTAGS
+GSYMS
+GTAGS
+*.cmd
+*.d
+*.dmp
+*.elf
+*.lds
+*.map
+*.o
+*.png
+*.swp
+*.ta
+cscope.*
