@@ -69,7 +69,7 @@ class taServer(object):
         
         print ('Received the SWATT bytes and decode:')
         request = client_socket.recv(32)
-        data = self.cipher.decrypt(encrypted)
+        data = self.cipher.decrypt(request)
         print(data)
 
 #-----------------------------------------------------------------------------

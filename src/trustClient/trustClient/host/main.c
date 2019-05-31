@@ -25,13 +25,22 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/*	Name: trustClient
+	Purpose: This module is use optee to create a truct TCP client application
+			to connection to the server to down load the AES256 encrypted challeage 
+			value to calculate the gate way program. This file is edited based on 
+			the optee aes example
+
+	Author:      Yuancheng Liu
+	Created:     2019/05/08
+	Copyright: (c) 2017, Linaro Limited, 2019 YC
+*/
+
 #include <err.h>
 #include <stdio.h>
 #include <string.h>
 #include <netdb.h> 
 #include <sys/socket.h> 
-
-
 
 /* OP-TEE TEE client API (built by optee_client) */
 #include <tee_client_api.h>
@@ -46,8 +55,7 @@
 #define DECODE			0
 #define ENCODE			1
 
-#define MAX 80 
-#define PORT 5005 
+#define PORT 5007 
 #define SA struct sockaddr 
 
 /* TEE resources */
@@ -93,8 +101,8 @@ void prepare_aes(struct test_ctx *ctx, int encode)
 					 TEEC_VALUE_INPUT,
 					 TEEC_NONE);
 
-	op.params[0].value.a = TA_AES_ALGO_CTR;
-	op.params[1].value.a = TA_AES_SIZE_256BIT;
+	op.params[0].value.a = TA_AES_ALGO_CBC;   // algo mode.
+	op.params[1].value.a = TA_AES_SIZE_256BIT;// Keysize
 	op.params[2].value.a = encode ? TA_AES_MODE_ENCODE :
 					TA_AES_MODE_DECODE;
 
@@ -168,28 +176,12 @@ void cipher_buffer(struct test_ctx *ctx, char *in, char *out, size_t sz)
 
 void display(char* ciphertext, int len){
     int v;
-	printf("---\n");
+	printf("len: %d \n", len);
     for (v=0; v<len; v++){
-        printf("%d", ciphertext[v]);
+        printf("%d ", ciphertext[v]);
     }
     printf("\n");
 }
-
-int func(int sockfd) 
-{
-	char rbuff[MAX]; 
-	int n;
-	printf("wait for server response\n");
-	bzero(rbuff, sizeof(rbuff)); 
-	printf("Enter the string : \n"); 
-	n = 0; 
-	rbuff[0] = 'F';
-	rbuff[1] = 'D';
-	write(sockfd, rbuff, sizeof(rbuff)); 
-	bzero(rbuff, sizeof(rbuff)); 
-	read(sockfd, rbuff, sizeof(rbuff));
-	return atoi(rbuff); 
-} 
 
 int main(void)
 {
@@ -200,93 +192,102 @@ int main(void)
 	char ciph[AES_TEST_BUFFER_SIZE];
 	char temp[AES_TEST_BUFFER_SIZE];
 
-	printf("Prepare session with the TA\n");
+	printf("TEE: Prepare session with the TA\n");
 	prepare_tee_session(&ctx);
-
-	printf("Prepare encode operation\n");
-	prepare_aes(&ctx, ENCODE);
-
-	printf("Load key in TA\n");
-	memset(key, 0xa5, sizeof(key)); /* Load some dummy value */
-	set_key(&ctx, key, AES_TEST_KEY_SIZE);
-	display(key, sizeof(key));
-
-	printf("Reset ciphering operation in TA (provides the initial vector)\n");
-	memset(iv, 0xa5, sizeof(iv)); /* Load some dummy value */
-	set_iv(&ctx, iv, AES_TEST_IV_SIZE);
-	printf("This is the IV <%X>\n",iv );
-	display(iv, sizeof(iv));
-
-
-	printf("Encore buffer from TA\n");
-	memset(clear, 0x5a, sizeof(clear)); /* Load some dummy value */
-	cipher_buffer(&ctx, clear, ciph, AES_TEST_BUFFER_SIZE);
-
-	printf("This is the clear %X\n",clear );
-	display(clear, sizeof(clear));
-
-	printf("This is the ciph %X\n",ciph );
+	
+	// Step 1: fetch the challenge from the server. 
+	printf("--------------------------------------\n");
+	printf("TCP: Init the TCP client\n");
+	// Init the TCP client
+	int sockfd, connfd; 
+	struct sockaddr_in servaddr, cli; 
+	// socket create and varification 
+	sockfd = socket(AF_INET, SOCK_STREAM, 0); 
+	if (sockfd == -1) { 
+		printf("TCP: socket creation failed...\n"); 
+		exit(0); 
+	} 
+	else
+		printf("TCP: Socket successfully created..\n"); 
+	bzero(&servaddr, sizeof(servaddr)); 
+	// assign TCP IP, PORT 
+	servaddr.sin_family = AF_INET; 
+	servaddr.sin_addr.s_addr = inet_addr("127.0.0.1"); 
+	servaddr.sin_port = htons(PORT); 
+	// connect the client socket to server socket 
+	if (connect(sockfd, (SA*)&servaddr, sizeof(servaddr)) != 0) { 
+		printf("TCP: connection with the server failed...\n"); 
+		exit(0); 
+	} 
+	else
+		printf("TCP: connected to the server..\n"); 
+	// send challenge fetch request.
+	printf("TCP: send the fetch request \n");
+	char rbuff[AES_TEST_BUFFER_SIZE]; 
+	bzero(rbuff, sizeof(rbuff)); 
+	rbuff[0] = 'F';
+	write(sockfd, rbuff, sizeof(rbuff));
+	// get the cyphtext from the server.
+	bzero(ciph, sizeof(ciph)); 
+	read(sockfd, ciph, sizeof(ciph));
+	printf("TCP: get ciph text from server: \n");
 	display(ciph, sizeof(ciph));
+	printf("--------------------------------------\n");
 
+	// Step 2: Decode the message by AES256 and get challenge data.  
 	printf("Prepare decode operation\n");
 	prepare_aes(&ctx, DECODE);
 
-	printf("Load key in TA\n");
+	printf("DC:Load key in TA\n");
 	memset(key, 0xa5, sizeof(key)); /* Load some dummy value */
 	set_key(&ctx, key, AES_TEST_KEY_SIZE);
+	//display(key, sizeof(key));
 
-	printf("Reset ciphering operation in TA (provides the initial vector)\n");
+	printf("DC: Reset ciphering operation in TA \n");
 	memset(iv, 0xa5, sizeof(iv)); /* Load some dummy value */
 	set_iv(&ctx, iv, AES_TEST_IV_SIZE);
+	//display(iv, sizeof(iv));
 
-	printf("Decode buffer from TA\n");
-	memset(clear, 0x5a, sizeof(clear)); /* Load some dummy value */
+	printf("DC: Decode buffer from TA\n");
 	cipher_buffer(&ctx, ciph, temp, AES_TEST_BUFFER_SIZE);
-	printf("This is the temp %X\n",temp );
+	printf("DC: This is the challenge: %X\n",temp );
 	display(temp, sizeof(temp));
 
 	/* Check decoded is the clear content */
+	memset(clear, 0x5a, sizeof(clear)); /* Load some dummy value */
+	printf("DC: This is the clear X: %X\n",clear );
+	display(clear, sizeof(clear));
 	if (memcmp(clear, temp, AES_TEST_BUFFER_SIZE))
 		printf("Clear text and decoded text differ => ERROR\n");
 	else
 		printf("Clear text and decoded text match\n");
+	printf("--------------------------------------\n");
 
-	int num; 
+	// Step 3: Encode the SWATT message by AES256 send to server. 
+	printf("Prepare encode operation\n");
+	prepare_aes(&ctx, ENCODE);
 
-	// Init the TCP client
-	int sockfd, connfd; 
-	struct sockaddr_in servaddr, cli; 
+	printf("EC: Load key in TA\n");
+	memset(key, 0xa5, sizeof(key)); /* Load some dummy value */
+	set_key(&ctx, key, AES_TEST_KEY_SIZE);
+	//display(key, sizeof(key));
 
-	// socket create and varification 
-	sockfd = socket(AF_INET, SOCK_STREAM, 0); 
-	if (sockfd == -1) { 
-		printf("socket creation failed...\n"); 
-		exit(0); 
-	} 
-	else
-		printf("Socket successfully created..\n"); 
-	bzero(&servaddr, sizeof(servaddr)); 
+	printf("EC: Reset ciphering operation in TA \n");
+	memset(iv, 0xa5, sizeof(iv)); /* Load some dummy value */
+	set_iv(&ctx, iv, AES_TEST_IV_SIZE);
+	//printf("EC: This is the IV <%X>\n",iv );
+	//display(iv, sizeof(iv));
 
-	// assign IP, PORT 
-	servaddr.sin_family = AF_INET; 
-	servaddr.sin_addr.s_addr = inet_addr("127.0.0.1"); 
-	servaddr.sin_port = htons(PORT); 
+	printf("EC: Encore buffer from TA\n");
+	memset(clear, 0x5a, sizeof(clear)); /* Load some dummy value */
+	cipher_buffer(&ctx, clear, ciph, AES_TEST_BUFFER_SIZE);
+	printf("EC: This is the ciphtext %X\n",ciph );
+	display(clear, sizeof(ciph));
 
-	// connect the client socket to server socket 
-	if (connect(sockfd, (SA*)&servaddr, sizeof(servaddr)) != 0) { 
-		printf("connection with the server failed...\n"); 
-		exit(0); 
-	} 
-	else
-		printf("connected to the server..\n"); 
-	
-	// function for chat 
-	num = func(sockfd);
-
-	printf("The challenge numer is %d \n", num);
-	
-	write(sockfd, temp, sizeof(temp)); 
+	// Send to server and close the socket
+	write(sockfd, ciph, sizeof(ciph)); 
 	close(sockfd);
+	printf("--------------------------------------\n");
 
 	terminate_tee_session(&ctx);
 	return 0;
