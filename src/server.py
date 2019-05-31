@@ -30,7 +30,6 @@ server.bind((bind_ip, bind_port))
 server.listen(5)  # max backlog of connections
 
 print ('Listening on {}:{}'.format(bind_ip, bind_port))
-<<<<<<< HEAD
 
 key = bytes([0xa5]*32)
 cipher = AESCipher(key)
@@ -48,28 +47,9 @@ def handle_client_connection(client_socket):
     request = client_socket.recv(32)
     data = cipher.decrypt(encrypted)
     print(data)
-=======
-
-key = bytes([0xa5]*32)
-cipher = AESCipher(key)
-encrypted = cipher.encrypt(bytes([0xa5]*32))
-decrypted = cipher.decrypt(encrypted)
-print (encrypted)
-print (decrypted)
-
-def handle_client_connection(client_socket):
-    while True:
-        request = client_socket.recv(32)
-        print ('Received {}'.format(request))
-        client_socket.send(encrypted)
->>>>>>> 2f8068e1730b966836e03398c4982cde43cd33f8
 
 while True:
     client_sock, address = server.accept()
     print ('Accepted connection from {}:{}'.format(address[0], address[1]))
-<<<<<<< HEAD
     target=handle_client_connection(client_sock)
     client_sock.close()
-=======
-    target=handle_client_connection(client_sock) 
->>>>>>> 2f8068e1730b966836e03398c4982cde43cd33f8
