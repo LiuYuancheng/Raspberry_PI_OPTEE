@@ -32,12 +32,13 @@
 			the optee aes example
 
 	Author:      Yuancheng Liu
-	Created:     2019/05/08
+	Created:     2019/05/28
 	Copyright: (c) 2017, Linaro Limited, 2019 YC
 */
-
+#define _GNU_SOURCE
 #include <err.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <netdb.h> 
 #include <sys/socket.h> 
@@ -54,14 +55,17 @@
 
 #define DECODE			0
 #define ENCODE			1
-
-#define PORT 5007 
 #define SA struct sockaddr 
 
 /* TEE resources */
 struct test_ctx {
 	TEEC_Context ctx;
 	TEEC_Session sess;
+};
+
+struct IPtuple{
+    char ipAddr[20];
+    int port;
 };
 
 void prepare_tee_session(struct test_ctx *ctx)
@@ -174,6 +178,36 @@ void cipher_buffer(struct test_ctx *ctx, char *in, char *out, size_t sz)
 			res, origin);
 }
 
+struct IPtuple getAddr(){
+    FILE * fp;
+    char * line = NULL;
+    size_t len = 0;
+    ssize_t read;
+    char * pch;
+    fp = fopen("configLocal.txt", "r");
+    if (fp == NULL){
+        printf("file open error");
+        exit(EXIT_FAILURE);   
+    }
+    while ((read = getline(&line, &len, fp)) != -1) {
+        //printf("Retrieved line of length %zu:\n", read);
+        //printf("%s", line);
+        if (line[0] == '#' || line[0] == '\n' || line == NULL ){
+            //remove the comment line
+            continue;
+        }
+        struct IPtuple r = {};
+        strcpy(r.ipAddr, strtok(line, ":"));
+        //printf("-IP:%s\n", r.ipAddr);
+        r.port = atoi(strtok(NULL, ":"));
+        //printf("-Port:%d\n", r.port);
+        fclose(fp);
+        if (line)
+            free(line);
+        return r;
+    } 
+}
+
 void display(char* ciphertext, int len){
     int v;
 	printf("len: %d \n", len);
@@ -210,10 +244,11 @@ int main(void)
 	else
 		printf("TCP: Socket successfully created..\n"); 
 	bzero(&servaddr, sizeof(servaddr)); 
-	// assign TCP IP, PORT 
+	// assign TCP IP, PORT(load the setting from the config file.)
+	struct IPtuple r = getAddr();
 	servaddr.sin_family = AF_INET; 
-	servaddr.sin_addr.s_addr = inet_addr("127.0.0.1"); 
-	servaddr.sin_port = htons(PORT); 
+	servaddr.sin_addr.s_addr = inet_addr(r.ipAddr); 
+	servaddr.sin_port = htons(r.port); 
 	// connect the client socket to server socket 
 	if (connect(sockfd, (SA*)&servaddr, sizeof(servaddr)) != 0) { 
 		printf("TCP: connection with the server failed...\n"); 
@@ -257,6 +292,7 @@ int main(void)
 	memset(clear, 0x5a, sizeof(clear)); /* Load some dummy value */
 	printf("DC: This is the clear X: %X\n",clear );
 	display(clear, sizeof(clear));
+	
 	if (memcmp(clear, temp, AES_TEST_BUFFER_SIZE))
 		printf("Clear text and decoded text differ => ERROR\n");
 	else
@@ -282,7 +318,7 @@ int main(void)
 	memset(clear, 0x5a, sizeof(clear)); /* Load some dummy value */
 	cipher_buffer(&ctx, clear, ciph, AES_TEST_BUFFER_SIZE);
 	printf("EC: This is the ciphtext %X\n",ciph );
-	display(clear, sizeof(ciph));
+	display(ciph, sizeof(ciph));
 
 	// Send to server and close the socket
 	write(sockfd, ciph, sizeof(ciph)); 
