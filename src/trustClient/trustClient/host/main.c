@@ -137,6 +137,95 @@ void set_key(struct test_ctx *ctx, char *key, size_t key_sz)
 			res, origin);
 }
 
+
+char *readFileBytes(const char *name)
+{
+    FILE *fl = fopen(name, "r");
+    fseek(fl, 0, SEEK_END);
+    long len = ftell(fl);
+    len = 128000;
+    char *ret = malloc(len);
+    fseek(fl, 0, SEEK_SET);
+    fread(ret, 1, len, fl);
+    fclose(fl);
+    return ret;
+}
+
+void get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
+{
+	TEEC_Operation op;
+	uint32_t origin;
+	TEEC_Result res;
+
+	//------------------ 
+	char *ret = readFileBytes("firmwareSample");
+    int m = 300;
+    int puff = 1549;
+    char challenge[] = "Testing";
+    int keylen = sizeof(challenge) - 1;
+    int challengeInt[keylen];
+    for (int t = 0; t < keylen; t++)
+    {
+        challengeInt[t] = (int)challenge[t];
+    }
+    int state[m];
+    for (int i = 0; i < m; i++)
+    {
+        state[i] = i;
+    }
+
+    int j = 0;
+    for (int i = 0; i < m; i++)
+    {
+        j = (j + state[i] + challengeInt[i % keylen]) % m;
+        int tmp = state[i];
+        state[i] = state[j];
+        state[j] = tmp;
+    }
+    
+    int s = 1;
+    int k = 16;
+    int final = ((1 << k) - 1) & (puff >> (s - 1));
+    printf("IP:<%d>\n", final);
+    int test[keylen];
+    for (int t = 0; t < keylen; t++)
+    {
+        test[t] = challengeInt[t] ^ final;
+        //printf(":<%d>\n", test[t]);
+    }
+
+    for (int t = 0; t < keylen; t++)
+    {
+        if (t != keylen - 1)
+        {
+            test[t] ^= test[t + 1];
+        }
+        final += test[t] << 2;
+    }
+
+	//int *pstate = state;
+	
+	memset(&op, 0, sizeof(op));
+	op.paramTypes = TEEC_PARAM_TYPES(TEEC_VALUE_INOUT, TEEC_MEMREF_TEMP_INPUT,
+					TEEC_MEMREF_TEMP_INPUT, TEEC_NONE);
+	
+	//op.params[0].value.a = 42;
+
+	op.params[0].value.a = final;
+	op.params[1].tmpref.buffer = state;
+	op.params[2].tmpref.buffer = ret;
+
+	res = TEEC_InvokeCommand(&ctx->sess, TA_AES_CMD_SWATT, &op,
+				&origin);
+
+	if (res != TEEC_SUCCESS)
+		errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x",
+			res, origin);
+
+	printf("TA incremented value to %d\n", op.params[0].value.a);
+
+}
+
 void set_iv(struct test_ctx *ctx, char *iv, size_t iv_sz)
 {
 	TEEC_Operation op;
@@ -299,6 +388,11 @@ int main(void)
 		printf("Clear text and decoded text match\n");
 	printf("--------------------------------------\n");
 
+	//----------------
+	printf("SWATT:\n");
+	get_swatt(&ctx, key, AES_TEST_KEY_SIZE);
+	printf("--------------------------------------\n");
+	//------------------
 	// Step 3: Encode the SWATT message by AES256 send to server. 
 	printf("Prepare encode operation\n");
 	prepare_aes(&ctx, ENCODE);
