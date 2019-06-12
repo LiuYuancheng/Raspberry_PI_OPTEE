@@ -25,6 +25,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <inttypes.h>
+#include <string.h> 
 
 #include <tee_internal_api.h>
 #include <tee_internal_api_extensions.h>
@@ -50,6 +51,26 @@ struct aes_cipher {
 	TEE_OperationHandle op_handle;	/* AES ciphering operation */
 	TEE_ObjectHandle key_handle;	/* transient object to load the key */
 };
+
+
+//--------------------------------------------------
+/*Linear congruential random generator*/
+int bsd_rand();
+int rseed = 0;
+ 
+void bsd_srand(int x)
+{
+	rseed = x;
+}
+
+#define BSD_RAND_MAX ((1U << 31) - 1)
+ 
+int bsd_rand()
+{
+	return rseed = (rseed * 1103515245 + 12345) & BSD_RAND_MAX;
+}
+//-----------------------------------------------------
+
 
 /*
  * Few routines to convert IDs from TA API into IDs from OP-TEE.
@@ -361,6 +382,68 @@ static TEE_Result cipher_buffer(void *session, uint32_t param_types,
 				params[1].memref.buffer, &params[1].memref.size);
 }
 
+static TEE_Result inc_value(uint32_t param_types,
+	TEE_Param params[4])
+{
+	const uint32_t exp_param_types = TEE_PARAM_TYPES(TEE_PARAM_TYPE_VALUE_INOUT,
+						   TEE_PARAM_TYPE_MEMREF_INPUT,
+						   TEE_PARAM_TYPE_MEMREF_INPUT,
+						   TEE_PARAM_TYPE_NONE);
+
+	DMSG("has been called");
+	if (param_types != exp_param_types)
+		return TEE_ERROR_BAD_PARAMETERS;
+
+	DMSG("Got value: %u from NW", params[0].value.a);
+
+	//params[0].value.a++;
+	// main loop of the SWATT
+	int m = 300;
+	char *ret; 
+	memcpy(ret, params[1].memref.buffer, 128000);
+	int *state;
+	memcpy(state, params[2].memref.buffer, 300);
+
+	int cr_response = params[0].value.a;
+	int pprev_cs = state[256];
+	int prev_cs = state[257];
+	int current_cs = state[258];
+	int init_seed = m;
+	int swatt_seed = 0;
+	for (int i = 0; i < m; i++)
+	{
+		swatt_seed = cr_response ^ init_seed;
+		int Address = (state[i] << 8) + prev_cs;
+		//printf("AD:<%d>\n", Address);
+		bsd_srand(Address);
+		Address = bsd_rand() % 128000 + 1;
+		//printf("AD:<%d>\n", Address);
+		char strTemp = ret[Address];
+
+		//printf("R2:<%c>\n", strTemp);
+		//printf("R3:<%d>\n", current_cs);
+		//printf("R4:<%d>\n", pprev_cs);
+
+		int num = i - 1;
+		if (num < 0)
+		{
+			num = m - 1;
+		}
+
+		current_cs = current_cs + ((int)strTemp ^ pprev_cs + state[num]);
+		//printf("R5:<%d>\n", current_cs);
+		init_seed = current_cs + swatt_seed;
+		current_cs = current_cs >> 1;
+		pprev_cs = prev_cs;
+		prev_cs = current_cs;
+	}
+
+	params[0].value.a = current_cs;
+
+	DMSG("Increase value to: %u", params[0].value.a);
+	return TEE_SUCCESS;
+}
+
 TEE_Result TA_CreateEntryPoint(void)
 {
 	/* Nothing to do */
@@ -426,6 +509,8 @@ TEE_Result TA_InvokeCommandEntryPoint(void *session,
 		return reset_aes_iv(session, param_types, params);
 	case TA_AES_CMD_CIPHER:
 		return cipher_buffer(session, param_types, params);
+	case TA_AES_CMD_SWATT:
+		return inc_value(param_types, params);
 	default:
 		EMSG("Command ID 0x%x is not supported", cmd);
 		return TEE_ERROR_NOT_SUPPORTED;
