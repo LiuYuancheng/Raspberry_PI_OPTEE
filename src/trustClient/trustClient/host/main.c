@@ -159,11 +159,11 @@ void get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
 
 	//------------------ 
 	char *ret = readFileBytes("firmwareSample");
-    int m = 300;
-    int puff = 1549;
-    char challenge[] = "Testing";
-    int keylen = sizeof(challenge) - 1;
-    int challengeInt[keylen];
+	int m = 300;
+	int puff = 1549;
+	char challenge[] = "Testing";
+	int keylen = sizeof(challenge) - 1;
+	int challengeInt[keylen];
     for (int t = 0; t < keylen; t++)
     {
         challengeInt[t] = (int)challenge[t];
@@ -203,27 +203,46 @@ void get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
         final += test[t] << 2;
     }
 
-	int cr_response = final;
+	// calculate the address in the trustZone
+	memset(&op, 0, sizeof(op));
+	op.paramTypes = TEEC_PARAM_TYPES(TEEC_VALUE_INOUT, TEEC_VALUE_INOUT,
+				TEEC_VALUE_INOUT, TEEC_NONE);
+		
     int pprev_cs = state[256];
     int prev_cs = state[257];
-    int current_cs = state[258];
-    int init_seed = m;
-    int swatt_seed = 0; 
-    for (int i = 0; i < m; i++)
-    {	
-		swatt_seed = cr_response ^ init_seed;
-		// calculate the address in the trustZone
-		memset(&op, 0, sizeof(op));
-		op.paramTypes = TEEC_PARAM_TYPES(TEEC_VALUE_INOUT, TEEC_NONE,
-					TEEC_NONE, TEEC_NONE);
-		op.params[0].value.a = (state[i] << 8)+prev_cs;
-		res = TEEC_InvokeCommand(&ctx->sess, TA_SWATT_CMD_RAND, &op,
-				&origin);
+
+	op.params[0].value.a = 0;  //swatt_seed -> op.params[0].value.a
+	op.params[0].value.b = m;  //init_seed	-> op.params[0].value.b
+
+	op.params[1].value.a = 0; // Address -> op.params[1].value.a
+	op.params[1].value.b = state[258]; // current_cs -> op.params[1].value.b
+
+	op.params[2].value.a = state[257]; // prev_cs -> op.params[2].value.a
+	op.params[2].value.b = state[256]; // pprev_cs -> op.params[3].value.b
+
+	for (int i = 0; i < m; i++)
+    {
+		op.params[0].value.a = final ^ op.params[0].value.b;
+		op.params[1].value.a = (state[i] << 8)+op.params[2].value.a;
+		res = TEEC_InvokeCommand(&ctx->sess, TA_SWATT_CMD_RAND, &op, &origin);
 		if (res != TEEC_SUCCESS)
 			errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x",
 				res, origin);
-		printf("TA incremented value to %d\n", op.params[0].value.a);
-	}
+		int Address = op.params[1].value.a;
+		char strTemp = ret[Address];
+		int num = i-1;
+		if(num<0){
+			num = m-1;
+		}
+
+		op.params[1].value.b = op.params[1].value.b +((int)strTemp ^ op.params[2].value.b + state[num]);
+		//printf("R5:<%d>\n", current_cs);
+		res = TEEC_InvokeCommand(&ctx->sess, TA_SWATT_CMD_CAL, &op, &origin);
+		if (res != TEEC_SUCCESS)
+			errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x",
+				res, origin);
+    }
+	printf("TA incremented value to %d\n", op.params[1].value.b);
 }
 
 void set_iv(struct test_ctx *ctx, char *iv, size_t iv_sz)
