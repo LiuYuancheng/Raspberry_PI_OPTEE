@@ -203,27 +203,27 @@ void get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
         final += test[t] << 2;
     }
 
-	//int *pstate = state;
-	
-	memset(&op, 0, sizeof(op));
-	op.paramTypes = TEEC_PARAM_TYPES(TEEC_VALUE_INOUT, TEEC_MEMREF_TEMP_INPUT,
-					TEEC_MEMREF_TEMP_INPUT, TEEC_NONE);
-	
-	//op.params[0].value.a = 42;
-
-	op.params[0].value.a = final;
-	op.params[1].tmpref.buffer = state;
-	op.params[2].tmpref.buffer = ret;
-
-	res = TEEC_InvokeCommand(&ctx->sess, TA_AES_CMD_SWATT, &op,
+	int cr_response = final;
+    int pprev_cs = state[256];
+    int prev_cs = state[257];
+    int current_cs = state[258];
+    int init_seed = m;
+    int swatt_seed = 0; 
+    for (int i = 0; i < m; i++)
+    {	
+		swatt_seed = cr_response ^ init_seed;
+		// calculate the address in the trustZone
+		memset(&op, 0, sizeof(op));
+		op.paramTypes = TEEC_PARAM_TYPES(TEEC_VALUE_INOUT, TEEC_NONE,
+					TEEC_NONE, TEEC_NONE);
+		op.params[0].value.a = (state[i] << 8)+prev_cs;
+		res = TEEC_InvokeCommand(&ctx->sess, TA_SWATT_CMD_RAND, &op,
 				&origin);
-
-	if (res != TEEC_SUCCESS)
-		errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x",
-			res, origin);
-
-	printf("TA incremented value to %d\n", op.params[0].value.a);
-
+		if (res != TEEC_SUCCESS)
+			errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x",
+				res, origin);
+		printf("TA incremented value to %d\n", op.params[0].value.a);
+	}
 }
 
 void set_iv(struct test_ctx *ctx, char *iv, size_t iv_sz)
