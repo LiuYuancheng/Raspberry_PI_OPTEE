@@ -382,24 +382,41 @@ static TEE_Result cipher_buffer(void *session, uint32_t param_types,
 				params[1].memref.buffer, &params[1].memref.size);
 }
 
-static TEE_Result rand_value(uint32_t param_types,
-	TEE_Param params[4])
+static TEE_Result rand_value(uint32_t param_types, TEE_Param params[4])
 {
 	const uint32_t exp_param_types = TEE_PARAM_TYPES(TEE_PARAM_TYPE_VALUE_INOUT,
-						   TEE_PARAM_TYPE_NONE,
-						   TEE_PARAM_TYPE_NONE,
+						   TEE_PARAM_TYPE_VALUE_INOUT,
+						   TEE_PARAM_TYPE_VALUE_INOUT,
 						   TEE_PARAM_TYPE_NONE);
 
 	DMSG("has been called");
 	if (param_types != exp_param_types)
 		return TEE_ERROR_BAD_PARAMETERS;
 
-	DMSG("Got value: %u from NW", params[0].value.a);
-
-	int Address = params[0].value.a; 
+	DMSG("Got value: %u from NW", params[1].value.a);
+	int Address = params[1].value.a; 
 	bsd_srand(Address);
 	Address = bsd_rand() % 128000 + 1;
-	params[0].value.a = Address;
+	params[1].value.a = Address;
+	DMSG("Increase value to: %u", params[1].value.a);
+	return TEE_SUCCESS;
+}
+
+static TEE_Result swatt_next(uint32_t param_types, TEE_Param params[4])
+{
+	const uint32_t exp_param_types = TEE_PARAM_TYPES(TEE_PARAM_TYPE_VALUE_INOUT,
+						   TEE_PARAM_TYPE_VALUE_INOUT,
+						   TEE_PARAM_TYPE_VALUE_INOUT,
+						   TEE_PARAM_TYPE_NONE);
+
+	DMSG("has been called");
+	if (param_types != exp_param_types)
+		return TEE_ERROR_BAD_PARAMETERS;
+	DMSG("Got value: %u from NW", params[0].value.a);
+	params[0].value.b = params[1].value.b + params[0].value.a;
+	params[1].value.b = params[1].value.b >> 1; 
+	params[2].value.b = params[2].value.a;
+	params[2].value.a = params[1].value.b;
 	DMSG("Increase value to: %u", params[0].value.a);
 	return TEE_SUCCESS;
 }
@@ -471,6 +488,8 @@ TEE_Result TA_InvokeCommandEntryPoint(void *session,
 		return cipher_buffer(session, param_types, params);
 	case TA_SWATT_CMD_RAND:
 		return rand_value(param_types, params);
+	case TA_SWATT_CMD_CAL:
+		return swatt_next(param_types, params);
 	default:
 		EMSG("Command ID 0x%x is not supported", cmd);
 		return TEE_ERROR_NOT_SUPPORTED;
