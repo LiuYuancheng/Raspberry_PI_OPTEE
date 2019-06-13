@@ -79,7 +79,12 @@
  */
 #define TA_AES_CMD_CIPHER		3
 
-#define TA_AES_CMD_SWATT		4
+
+#define TA_SWATT_CMD_RAND		4
+
+
+#define TA_SWATT_CMD_CAL		5
+
 
 
 #endif /* __AES_TA_H */
