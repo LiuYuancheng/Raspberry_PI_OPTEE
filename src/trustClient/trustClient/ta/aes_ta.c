@@ -33,9 +33,9 @@
 #include <aes_ta.h>
 
 #define AES128_KEY_BIT_SIZE		128
-#define AES128_KEY_BYTE_SIZE		(AES128_KEY_BIT_SIZE / 8)
+#define AES128_KEY_BYTE_SIZE	(AES128_KEY_BIT_SIZE / 8)
 #define AES256_KEY_BIT_SIZE		256
-#define AES256_KEY_BYTE_SIZE		(AES256_KEY_BIT_SIZE / 8)
+#define AES256_KEY_BYTE_SIZE	(AES256_KEY_BIT_SIZE / 8)
 
 /*
  * Ciphering context: each opened session relates to a cipehring operation.
@@ -381,39 +381,41 @@ static TEE_Result cipher_buffer(void *session, uint32_t param_types,
 				params[1].memref.buffer, &params[1].memref.size);
 }
 
+/* Get the BSD Linear congruential random value.*/
 static TEE_Result rand_value(uint32_t param_types, TEE_Param params[4])
 {
 	const uint32_t exp_param_types = TEE_PARAM_TYPES(TEE_PARAM_TYPE_VALUE_INOUT,
-						   TEE_PARAM_TYPE_VALUE_INOUT,
-						   TEE_PARAM_TYPE_VALUE_INOUT,
-						   TEE_PARAM_TYPE_NONE);
+													 TEE_PARAM_TYPE_VALUE_INOUT,
+													 TEE_PARAM_TYPE_VALUE_INOUT,
+													 TEE_PARAM_TYPE_NONE);
 
-	DMSG("has been called");
+	DMSG("rand_value has been called");
 	if (param_types != exp_param_types)
 		return TEE_ERROR_BAD_PARAMETERS;
 
-	DMSG("Got value: %u from NW", params[1].value.a);
-	int Address = params[1].value.a; 
+	DMSG("Got rand seed: %u from NW", params[1].value.a);
+	int Address = params[1].value.a;
 	bsd_srand(Address);
 	Address = bsd_rand() % 128000 + 1;
 	params[1].value.a = Address;
-	DMSG("Increase value to: %u", params[1].value.a);
+	DMSG("Calculate random value: %u", params[1].value.a);
 	return TEE_SUCCESS;
 }
 
+/* Get the SWATT next current byte, reference func: getSWATT <IOT_ATT.py> */
 static TEE_Result swatt_next(uint32_t param_types, TEE_Param params[4])
 {
 	const uint32_t exp_param_types = TEE_PARAM_TYPES(TEE_PARAM_TYPE_VALUE_INOUT,
-						   TEE_PARAM_TYPE_VALUE_INOUT,
-						   TEE_PARAM_TYPE_VALUE_INOUT,
-						   TEE_PARAM_TYPE_NONE);
+													 TEE_PARAM_TYPE_VALUE_INOUT,
+													 TEE_PARAM_TYPE_VALUE_INOUT,
+													 TEE_PARAM_TYPE_NONE);
 
 	DMSG("has been called");
 	if (param_types != exp_param_types)
 		return TEE_ERROR_BAD_PARAMETERS;
 	DMSG("Got value: %u from NW", params[0].value.a);
 	params[0].value.b = params[1].value.b + params[0].value.a;
-	params[1].value.b = params[1].value.b >> 1; 
+	params[1].value.b = params[1].value.b >> 1;
 	params[2].value.b = params[2].value.a;
 	params[2].value.a = params[1].value.b;
 	DMSG("Increase value to: %u", params[0].value.a);
