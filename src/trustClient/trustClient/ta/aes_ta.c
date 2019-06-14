@@ -52,7 +52,6 @@ struct aes_cipher {
 	TEE_ObjectHandle key_handle;	/* transient object to load the key */
 };
 
-
 //--------------------------------------------------
 /*Linear congruential random generator*/
 int bsd_rand();
