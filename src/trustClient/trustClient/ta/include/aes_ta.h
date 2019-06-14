@@ -80,11 +80,22 @@
 #define TA_AES_CMD_CIPHER		3
 
 
+/*
+ * TA_SWATT_CMD_RAND - random number seed input and random int output
+ * param[0] (value) a: input random seed b: unused
+ * param[1] unused
+ * param[2] unused
+ * param[3] unused
+ */
 #define TA_SWATT_CMD_RAND		4
 
-
+/*
+ * TA_SWATT_CMD_CAL - SWATT byte swap and shift
+ * param[0] (value) a: swatt_seed	b: init_seed
+ * param[1] (value) a: Address		b: current_cs
+ * param[2] (value) a: prev_cs		b: pprev_cs
+ * param[3] unused
+ */
 #define TA_SWATT_CMD_CAL		5
-
-
 
 #endif /* __AES_TA_H */
