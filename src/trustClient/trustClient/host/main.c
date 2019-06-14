@@ -39,6 +39,7 @@
 #include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <string.h>
 #include <netdb.h> 
 #include <sys/socket.h> 
@@ -56,6 +57,10 @@
 #define DECODE			0
 #define ENCODE			1
 #define SA struct sockaddr 
+
+// progress bar to show the swatt steps.
+#define PBSTR "============================================================"
+#define PBWIDTH 60
 
 /* TEE resources */
 struct test_ctx {
@@ -137,13 +142,12 @@ void set_key(struct test_ctx *ctx, char *key, size_t key_sz)
 			res, origin);
 }
 
-
 char *readFileBytes(const char *name)
 {
     FILE *fl = fopen(name, "r");
     fseek(fl, 0, SEEK_END);
     long len = ftell(fl);
-    len = 128000;
+    //len = 128000;
     char *ret = malloc(len);
     fseek(fl, 0, SEEK_SET);
     fread(ret, 1, len, fl);
@@ -151,18 +155,21 @@ char *readFileBytes(const char *name)
     return ret;
 }
 
-void get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
+int get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
 {
 	TEEC_Operation op;
 	uint32_t origin;
 	TEEC_Result res;
-
+	//------------------------------------
+	char challenge[key_sz];
+	strncpy(challenge, key, key_sz);
+	printf("key_sz:<%d>", key_sz);
+	printf("Challenge is <%s>\n", challenge);
 	//------------------ 
 	char *ret = readFileBytes("firmwareSample");
 	int m = 300;
 	int puff = 1549;
-	char challenge[] = "Testing";
-	int keylen = sizeof(challenge) - 1;
+	int keylen = key_sz;
 	int challengeInt[keylen];
     for (int t = 0; t < keylen; t++)
     {
@@ -220,7 +227,7 @@ void get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
 	op.params[2].value.a = state[257]; // prev_cs -> op.params[2].value.a
 	op.params[2].value.b = state[256]; // pprev_cs -> op.params[3].value.b
 
-	for (int i = 0; i < m; i++)
+	for (int i = 0; i < 100; i++)
     {
 		op.params[0].value.a = final ^ op.params[0].value.b;
 		op.params[1].value.a = (state[i] << 8)+op.params[2].value.a;
@@ -234,15 +241,19 @@ void get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
 		if(num<0){
 			num = m-1;
 		}
-
+		usleep(20000);// sleep a short while to avoid PI hang.
 		op.params[1].value.b = op.params[1].value.b +((int)strTemp ^ op.params[2].value.b + state[num]);
 		//printf("R5:<%d>\n", current_cs);
 		res = TEEC_InvokeCommand(&ctx->sess, TA_SWATT_CMD_CAL, &op, &origin);
 		if (res != TEEC_SUCCESS)
 			errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x",
 				res, origin);
+
+		// Show the progress bar.		
+		printProgress((double)i/100);
     }
 	printf("TA incremented value to %d\n", op.params[1].value.b);
+	return op.params[1].value.b;
 }
 
 void set_iv(struct test_ctx *ctx, char *iv, size_t iv_sz)
@@ -323,6 +334,16 @@ void display(char* ciphertext, int len){
         printf("%d ", ciphertext[v]);
     }
     printf("\n");
+}
+
+void printProgress (double percentage)
+{
+    int val = (int) (percentage * 100);
+    int lpad = (int) (percentage * PBWIDTH);
+    int rpad = PBWIDTH - lpad;
+
+    printf ("\r%3d%% [%.*s%*s]", val, lpad, PBSTR, rpad, "");
+    fflush (stdout);
 }
 
 int main(void)
@@ -409,7 +430,8 @@ int main(void)
 
 	//----------------
 	printf("SWATT:\n");
-	get_swatt(&ctx, key, AES_TEST_KEY_SIZE);
+	int tempLen = 7; 
+	int swattVal = get_swatt(&ctx, temp, tempLen);
 	printf("--------------------------------------\n");
 	//------------------
 	// Step 3: Encode the SWATT message by AES256 send to server. 
@@ -418,6 +440,7 @@ int main(void)
 
 	printf("EC: Load key in TA\n");
 	memset(key, 0xa5, sizeof(key)); /* Load some dummy value */
+
 	set_key(&ctx, key, AES_TEST_KEY_SIZE);
 	//display(key, sizeof(key));
 
@@ -429,6 +452,10 @@ int main(void)
 
 	printf("EC: Encore buffer from TA\n");
 	memset(clear, 0x5a, sizeof(clear)); /* Load some dummy value */
+	snprintf(clear,10,"%d", swattVal);
+
+	printf("<%s>", clear);
+
 	cipher_buffer(&ctx, clear, ciph, AES_TEST_BUFFER_SIZE);
 	printf("EC: This is the ciphtext %X\n",ciph );
 	display(ciph, sizeof(ciph));
