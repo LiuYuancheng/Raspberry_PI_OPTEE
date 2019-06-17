@@ -1,4 +1,19 @@
-# Set the IP under formate xxx.xxx.xxx.xxx:xxx(127.0.0.1:5007)
+# set fmt: <Tag:val> Tag should be a 5letters str.
 
-# If there are multiple IP address, the first on will be used.
-127.0.0.1:5007
+# Set the TCP IP address fmt: <TCPIP:(str)***.***.***.***>
+TCPIP:127.0.0.1
+
+# Set the TCP listen fmt: <PORTN:(int)**>
+PORTN:5007
+
+# Set the checked program version fmt: <P_VER:(int)*>
+P_VER:1
+
+# set the gateway device ID fmt: <GW_ID:(int)*>
+GW_ID:1
+
+# set the AES256 encrypted key version fmt: <K_VER:(int)*>
+K_VER:1
+
+# set the challenge length fmt: <C_LEN:(int)*>
+C_LEN:7
