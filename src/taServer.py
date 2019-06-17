@@ -28,8 +28,8 @@ import IOT_Att as SWATT
 from Crypto.Cipher import AES
 
 
-bind_ip = '0.0.0.0'
-bind_port = 5007
+LOCAL_BIND_IP   = '0.0.0.0'
+LOCAL_PORT      = 5007
 CHA_LEN = 7     # default challenge we are going to use. 
 
 #-----------------------------------------------------------------------------
@@ -57,9 +57,9 @@ class taServer(object):
     def __init__(self):
         """ init the TCP socket."""
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server.bind((bind_ip, bind_port))
+        self.server.bind((LOCAL_BIND_IP, LOCAL_PORT))
         self.server.listen(5)  # max backlog of connections
-        print ('Listening on {}:{}'.format(bind_ip, bind_port))
+        print ('Listening on {}:{}'.format(LOCAL_BIND_IP, LOCAL_PORT))
         # Calculate the SWATT value
         self.challengeStr = ""
         self.swattHd = SWATT.swattCal()
