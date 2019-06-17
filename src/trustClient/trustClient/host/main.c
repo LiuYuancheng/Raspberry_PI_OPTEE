@@ -69,10 +69,14 @@ struct test_ctx {
 	TEEC_Session sess;
 };
 
-struct IPtuple{
-    char ipAddr[20];
-    int port;
-};
+/* Global variables*/
+char gv_ipAddr[20];
+int gv_port;
+int gv_KeyV; 
+int gv_gwID;
+int gv_proV;
+int gv_cLen; 
+
 //-------------------------------------------------------------------------------
 
 /*TEE session setup.*/
@@ -314,38 +318,83 @@ int get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
 }
 
 //-------------------------------------------------------------------------------
-
 /* Load the IP and port data from the local config file. */
-struct IPtuple getAddr()
+void getAddr()
 {
-	FILE *fp;
-	char *line = NULL;
-	size_t len = 0;
-	ssize_t read;
-	char *pch;
-	fp = fopen("configLocal.txt", "r");
-	if (fp == NULL)
-	{
-		printf("Local config file open error!");
-		exit(EXIT_FAILURE);
-	}
-	while ((read = getline(&line, &len, fp)) != -1)
-	{
-		//printf("%s", line);
-		if (line[0] == '#' || line[0] == '\n' || line == NULL)
-			continue; // jump the comment and empty line.
-		struct IPtuple r = {};
-		//data format example: 127.0.0.1:8080
-		strcpy(r.ipAddr, strtok(line, ":"));
-		//printf("-IP:%s\n", r.ipAddr);
-		r.port = atoi(strtok(NULL, ":"));
-		//printf("-Port:%d\n", r.port);
-		fclose(fp);
-		if (line)
-			free(line);
-		return r;
-	}
+    FILE *fp;
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t read;
+    char *pch;
+
+    fp = fopen("configLocal.txt", "r");
+    if (fp == NULL)
+    {
+        printf("file open error");
+        exit(EXIT_FAILURE);
+    }
+    while ((read = getline(&line, &len, fp)) != -1)
+    {
+        //printf("Retrieved line of length %zu:\n", read);
+        //printf("%s\n", line);
+        if (line[0] == '#' || line[0] == '\n' || line == NULL)
+        {
+            //remove the comment line
+            continue;
+        }
+
+        char message[20];
+        strcpy(message, strtok(line, ":"));
+
+        if (strstr(message, "TCPIP"))
+        {
+            strcpy(gv_ipAddr, strtok(NULL, ":"));
+            gv_ipAddr[strlen(gv_ipAddr) - 1] = '\0'; //remove the '\n'
+            //printf("IP addresss is: %s \n", gv_ipAddr);
+        }
+
+        if (strstr(message, "PORTN"))
+        {
+            gv_port = 5005;
+            gv_port = atoi(strtok(NULL, ":"));
+            //printf("port is: %d \n", gv_port);
+        }
+
+        if (strstr(message, "P_VER"))
+        {
+            gv_proV = 0;
+            gv_proV = atoi(strtok(NULL, ":"));
+            //printf("program version is: %d \n", gv_proV);
+        }
+
+        if (strstr(message, "K_VER"))
+        {
+            gv_KeyV = 0;
+            gv_KeyV = atoi(strtok(NULL, ":"));
+            //printf("key version is: %d \n", gv_KeyV);
+        }
+
+        if (strstr(message, "GW_ID"))
+        {
+            gv_gwID = 0;
+            gv_gwID = atoi(strtok(NULL, ":"));
+            //printf("Gate way ID is: %d \n", gv_gwID);
+        }
+
+        if (strstr(message, "C_LEN"))
+        {
+            gv_cLen = 0;
+            gv_cLen = atoi(strtok(NULL, ":"));
+            if (gv_cLen > 16)
+                gv_cLen = 16;
+            //printf("challenge Len : %d \n", gv_cLen);
+        }
+    }
+    fclose(fp);
+    if (line)
+        free(line);
 }
+
 //-------------------------------------------------------------------------------
 
 /* Display the hex number of the message/ciphText */
@@ -394,10 +443,10 @@ int main(void)
 		printf("TCP: Socket successfully created..\n");
 	bzero(&servaddr, sizeof(servaddr));
 	// Assign TCP IPaddr, PORT(load the setting from the config file.)
-	struct IPtuple r = getAddr();
+	getAddr();
 	servaddr.sin_family = AF_INET;
-	servaddr.sin_addr.s_addr = inet_addr(r.ipAddr);
-	servaddr.sin_port = htons(r.port);
+	servaddr.sin_addr.s_addr = inet_addr(gv_ipAddr);
+	servaddr.sin_port = htons(gv_port);
 	// Connect the client socket to server socket
 	if (connect(sockfd, (SA *)&servaddr, sizeof(servaddr)) != 0)
 	{
@@ -409,8 +458,8 @@ int main(void)
 	// Send challenge fetch request.
 	printf("TCP: send the fetch request \n");
 	char rbuff[AES_TEST_BUFFER_SIZE]; 
-	bzero(rbuff, sizeof(rbuff)); 
-	rbuff[0] = 'F';
+	bzero(rbuff, sizeof(rbuff));
+	sprintf(rbuff, "F;%d;%d;%d;%d;", gv_proV, gv_KeyV, gv_gwID, gv_cLen);
 	write(sockfd, rbuff, sizeof(rbuff));
 	// get the cyphtext from the server.
 	bzero(ciph, sizeof(ciph)); 
