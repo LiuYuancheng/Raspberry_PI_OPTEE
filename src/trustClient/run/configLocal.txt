@@ -1,19 +1,31 @@
 # set fmt: <Tag:val> Tag should be a 5letters str.
 
+# Set the program debug level. fmt:<DEBUG:(int)*>
+DEBUG:0
+
 # Set the TCP IP address fmt: <TCPIP:(str)***.***.***.***>
 TCPIP:127.0.0.1
 
 # Set the TCP listen fmt: <PORTN:(int)**>
 PORTN:5007
 
+# Set the checked program path<FILEP:(str)***>
+FILEP:firmwareSample
+
 # Set the checked program version fmt: <P_VER:(int)*>
 P_VER:1
 
-# set the gateway device ID fmt: <GW_ID:(int)*>
-GW_ID:1
+# Set the gateway device ID fmt: <GW_ID:(int)*>
+GW_ID:1549465112
 
-# set the AES256 encrypted key version fmt: <K_VER:(int)*>
+# Set the AES256 encrypted key version fmt: <K_VER:(int)*>
 K_VER:1
 
-# set the challenge length fmt: <C_LEN:(int)*>
+# Set the challenge length fmt: <C_LEN:(int)*>
 C_LEN:7
+
+# Set the swatt init m(m>=280) fmt: <SWA_M:(int)*>
+SWA_M:300
+
+# Set the swatt interation time n fmt: <SWA_N:(int)*>
+SWA_N:100
