@@ -70,12 +70,20 @@ struct test_ctx {
 };
 
 /* Global variables*/
-char gv_ipAddr[20];
-int gv_port;
-int gv_KeyV; 
-int gv_gwID;
-int gv_proV;
-int gv_cLen; 
+int gv_dbug;	// debug level of the program.
+
+char gv_ipAddr[20];	// Server IP addresss.
+int gv_port;		// Server connection port.
+
+char gv_flph[80];	// The path of the program. 
+
+int gv_keyV;	// AES key version. 
+int gv_gwID;	// Gateway unique ID(also used as the SWATT_PUFF)
+int gv_proV;	// The checked program version.
+int gv_cLen;	// challenge string length.(val<=16)
+int gv_sw_m;	// SWATT init value m.(default 300)
+int gv_iter;	// SWATT iteration time.(default 100)
+
 
 //-------------------------------------------------------------------------------
 
@@ -200,7 +208,9 @@ void cipher_buffer(struct test_ctx *ctx, char *in, char *out, size_t sz)
 
 // Read firmware file as bytes array.
 char *readFileBytes(const char *name)
-{
+{	
+	if (gv_dbug > 1)
+		printf("Read the file <%s>", name);
 	FILE *fl = fopen(name, "r");
 	fseek(fl, 0, SEEK_END);
 	long len = ftell(fl);
@@ -230,10 +240,9 @@ int get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
 	TEEC_Result res;
 	
 	// Set the parameters
-	int m = 300;
-	int addrNum = 100; // how many addresses swatt are going to check.
+	int m = gv_sw_m;
 	int state[m];
-	int puff = SWATT_PUFF;
+	int puff = gv_gwID;
 	char challenge[key_sz];
 	strncpy(challenge, key, key_sz);
 	int challengeInt[key_sz];
@@ -289,7 +298,7 @@ int get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
 	op.params[2].value.a = state[257]; // prev_cs -> op.params[2].value.a
 	op.params[2].value.b = state[256]; // pprev_cs -> op.params[3].value.b
 
-	for (int i = 0; i < addrNum; i++)
+	for (int i = 0; i < gv_iter; i++)
 	{
 		op.params[0].value.a = final ^ op.params[0].value.b;
 		op.params[1].value.a = (state[i] << 8) + op.params[2].value.a;
@@ -310,7 +319,7 @@ int get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
 			errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x",
 				 res, origin);
 		// Show the file checking progress bar.
-		printProgress((double)i / addrNum);
+		printProgress((double)i / gv_iter);
 	}
 	printf("Finished\n");
 	printf("SWATT: TA incremented value to %d\n", op.params[1].value.b);
@@ -318,8 +327,8 @@ int get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
 }
 
 //-------------------------------------------------------------------------------
-/* Load the IP and port data from the local config file. */
-void getAddr()
+/* Load the configuration file setting. */
+void loadConfig()
 {
     FILE *fp;
     char *line = NULL;
@@ -338,56 +347,90 @@ void getAddr()
         //printf("Retrieved line of length %zu:\n", read);
         //printf("%s\n", line);
         if (line[0] == '#' || line[0] == '\n' || line == NULL)
-        {
-            //remove the comment line
-            continue;
-        }
-
+            continue; //remove the comment line
         char message[20];
         strcpy(message, strtok(line, ":"));
 
-        if (strstr(message, "TCPIP"))
+		// load program' debug levle from line fmt:<DEBUG:(int)*>
+		if (strstr(message, "DEBUG"))
+        {
+            gv_dbug = 0;
+            gv_dbug = atoi(strtok(NULL, ":"));
+            printf("Currently program debug print level is: %d \n", gv_dbug);
+        }
+		// load ip address from line <TCPIP:(str)***.***.***.***>
+		else if (strstr(message, "TCPIP"))
         {
             strcpy(gv_ipAddr, strtok(NULL, ":"));
             gv_ipAddr[strlen(gv_ipAddr) - 1] = '\0'; //remove the '\n'
-            //printf("IP addresss is: %s \n", gv_ipAddr);
-        }
-
-        if (strstr(message, "PORTN"))
+			if (gv_dbug > 1)
+				printf("IP addresss is: %s \n", gv_ipAddr);
+		}
+		// load checked program' path from line <FILEP:(str)***>
+		else if (strstr(message, "FILEP"))
         {
-            gv_port = 5005;
+            strcpy(gv_flph, strtok(NULL, ":"));
+            gv_flph[strlen(gv_flph) - 1] = '\0'; //remove the '\n'
+			if (gv_dbug > 1)
+				printf("Checked program is: %s \n", gv_flph);
+		}
+		// load the TCP port number from line <PORTN:(int)**> 
+        else if (strstr(message, "PORTN"))
+        {
+            gv_port = 5007;
             gv_port = atoi(strtok(NULL, ":"));
-            //printf("port is: %d \n", gv_port);
-        }
-
-        if (strstr(message, "P_VER"))
+			if (gv_dbug > 1)
+				printf("port is: %d \n", gv_port);
+		}
+		// load checked program version from line <P_VER:(int)*>
+        else if (strstr(message, "P_VER"))
         {
             gv_proV = 0;
             gv_proV = atoi(strtok(NULL, ":"));
-            //printf("program version is: %d \n", gv_proV);
+			if (gv_dbug > 1)
+            	printf("program version is: %d \n", gv_proV);
         }
-
-        if (strstr(message, "K_VER"))
+		// load AES key version from line <K_VER:(int)*>
+        else if (strstr(message, "K_VER"))
         {
-            gv_KeyV = 0;
-            gv_KeyV = atoi(strtok(NULL, ":"));
-            //printf("key version is: %d \n", gv_KeyV);
+            gv_keyV = 0;
+            gv_keyV = atoi(strtok(NULL, ":"));
+            if (gv_dbug > 1)
+				printf("key version is: %d \n", gv_keyV);
         }
-
-        if (strstr(message, "GW_ID"))
+		// load gate way id/SWATT PUFF from line <GW_ID:(int)*>
+        else if (strstr(message, "GW_ID"))
         {
-            gv_gwID = 0;
+            gv_gwID = SWATT_PUFF;
             gv_gwID = atoi(strtok(NULL, ":"));
-            //printf("Gate way ID is: %d \n", gv_gwID);
+            if (gv_dbug > 1)
+				printf("Gate way ID is: %d \n", gv_gwID);
         }
-
-        if (strstr(message, "C_LEN"))
+		// load swatt challenge string length from line <C_LEN:(int)*> 
+        else if (strstr(message, "C_LEN"))
         {
             gv_cLen = 0;
             gv_cLen = atoi(strtok(NULL, ":"));
             if (gv_cLen > 16)
                 gv_cLen = 16;
-            //printf("challenge Len : %d \n", gv_cLen);
+            if (gv_dbug > 1)
+				printf("challenge Len : %d \n", gv_cLen);
+        }
+		// load SWATT init m from line <SWA_M:(int)*>
+        else if (strstr(message, "SWA_M"))
+        {
+            gv_sw_m = 300; // use 300 as default.
+            gv_sw_m = atoi(strtok(NULL, ":"));
+            if (gv_dbug > 1)
+				printf("SWATT init m is: %d \n", gv_sw_m);
+        }
+		// load SWATT init m from line <SWA_M:(int)*>
+        else if (strstr(message, "SWA_N"))
+        {
+            gv_iter = 100; // use 100 as defualt.
+            gv_iter = atoi(strtok(NULL, ":"));
+            if (gv_dbug > 1)
+            	printf("SWATT iteration n is: %d \n", gv_iter);
         }
     }
     fclose(fp);
@@ -424,8 +467,6 @@ int main(void)
 	 
 	printf("TEE: Prepare TrustZone session with the TA.\n");
 	prepare_tee_session(&ctx);
-	int debugLvl = 0; // debug message display deepth.
-
 	// Step 1: fetch the challenge from the server.
 	printf("--------------------------------------\n");
 	printf("TCP: Init the TCP client.\n");
@@ -443,7 +484,7 @@ int main(void)
 		printf("TCP: Socket successfully created..\n");
 	bzero(&servaddr, sizeof(servaddr));
 	// Assign TCP IPaddr, PORT(load the setting from the config file.)
-	getAddr();
+	loadConfig();
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = inet_addr(gv_ipAddr);
 	servaddr.sin_port = htons(gv_port);
@@ -459,13 +500,13 @@ int main(void)
 	printf("TCP: send the fetch request \n");
 	char rbuff[AES_TEST_BUFFER_SIZE]; 
 	bzero(rbuff, sizeof(rbuff));
-	sprintf(rbuff, "F;%d;%d;%d;%d;", gv_proV, gv_KeyV, gv_gwID, gv_cLen);
+	sprintf(rbuff, "F;%d;%d;%d;%d;%d;%d;", gv_keyV, gv_gwID, gv_proV, gv_cLen, gv_sw_m, gv_iter);
 	write(sockfd, rbuff, sizeof(rbuff));
 	// get the cyphtext from the server.
 	bzero(ciph, sizeof(ciph)); 
 	read(sockfd, ciph, sizeof(ciph));
 	printf("TCP: get <%d>Bytes ciphtext from server: \n", sizeof(ciph));
-	display(ciph, sizeof(ciph), debugLvl);
+	display(ciph, sizeof(ciph), gv_dbug);
 	printf("--------------------------------------\n");
 
 	// Step 2: Decode the message by AES256 and get challenge data.
@@ -475,22 +516,22 @@ int main(void)
 	printf("AES_D:Load key inside TA\n");
 	memset(key, 0xa5, sizeof(key)); // load some value as key(hard code)
 	set_key(&ctx, key, AES_TEST_KEY_SIZE);
-	display(key, sizeof(key), debugLvl);
+	display(key, sizeof(key), gv_dbug);
 
 	printf("AES_D: Reset ciphering operation IV in TA \n");
 	memset(iv, 0xa5, sizeof(iv)); /* Load some dummy value */
 	set_iv(&ctx, iv, AES_TEST_IV_SIZE);
-	display(iv, sizeof(iv), debugLvl);
+	display(iv, sizeof(iv), gv_dbug);
 
 	printf("AES_D: Decrypte ciphtext buffer from TA\n");
 	cipher_buffer(&ctx, ciph, temp, AES_TEST_BUFFER_SIZE); // challenge-> temp
 	//printf("DC: This is the challenge: %X\n",temp );
-	display(temp, sizeof(temp), debugLvl);
+	display(temp, sizeof(temp), gv_dbug);
 
 	/* Check decoded is the clear content(only used for) */
 	//memset(clear, 0x5a, sizeof(clear)); /* Load some dummy value */
 	//printf("DC: This is the clear X: %X\n",clear );
-	//display(clear, sizeof(clear), debugLvl));
+	//display(clear, sizeof(clear), gv_dbug));
 	//if (memcmp(clear, temp, AES_TEST_BUFFER_SIZE))
 	//	printf("Clear text and decoded text differ => ERROR\n");
 	//else
@@ -499,8 +540,7 @@ int main(void)
 
 	// Step 3: Calcualte the SWATT data from the trust application.
 	printf("SWATT: Pass in challenge data and calcualte: \n");
-	int tempLen = 7; // The challenge data len we are going to use.
-	int swattVal = get_swatt(&ctx, temp, tempLen);
+	int swattVal = get_swatt(&ctx, temp, gv_cLen);
 	printf("--------------------------------------\n");
 
 	// Step 4: Encode the SWATT message by AES256 and send to server.
@@ -510,12 +550,12 @@ int main(void)
 	printf("AES_E: Load key in TA\n");
 	memset(key, 0xa5, sizeof(key)); // load some value as key(hard code)
 	set_key(&ctx, key, AES_TEST_KEY_SIZE);
-	display(key, sizeof(key), debugLvl);
+	display(key, sizeof(key), gv_dbug);
 
 	printf("AES_E: Reset ciphering operation IV in TA \n");
 	memset(iv, 0xa5, sizeof(iv)); /* Load some dummy value */
 	set_iv(&ctx, iv, AES_TEST_IV_SIZE);
-	display(iv, sizeof(iv), debugLvl);
+	display(iv, sizeof(iv), gv_dbug);
 
 	printf("AES_E: Encore chanllenge data buffer from TA\n");
 	memset(clear, 0x5a, sizeof(clear)); /* Load some dummy value */
@@ -523,7 +563,7 @@ int main(void)
 	printf("SWATT int val:<%s> \n", clear);
 	cipher_buffer(&ctx, clear, ciph, AES_TEST_BUFFER_SIZE);
 	//printf("AES_E: This is the ciphtext %X\n",ciph );
-	display(ciph, sizeof(ciph), debugLvl);
+	display(ciph, sizeof(ciph), gv_dbug);
 	printf("--------------------------------------\n");
 
 	// Step 5: Send to server and close the socket
