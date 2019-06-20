@@ -72,10 +72,10 @@ struct test_ctx {
 /* Global variables*/
 int gv_dbug;	// debug level of the program.
 
-char gv_ipAddr[20];	// Server IP addresss.
-int gv_port;		// Server connection port.
+char gv_ipAddr[20];	// Server IP addresss.(default 127.0.0.1)
+int gv_port;		// Server connection port.(default 5007)
 
-char gv_flph[80];	// The path of the program. 
+char gv_flph[FILENAME_MAX];	// The path of the program. 
 
 int gv_keyV;	// AES key version. 
 int gv_gwID;	// Gateway unique ID(also used as the SWATT_PUFF)
@@ -209,10 +209,9 @@ void cipher_buffer(struct test_ctx *ctx, char *in, char *out, size_t sz)
 // Read firmware file as bytes array.
 char *readFileBytes(const char *name)
 {	
-	printf("xxxxx\n");
 	if (gv_dbug > 1)
-		printf("Read the file <%s>", gv_flph);
-	FILE *fl = fopen(gv_flph, "r");
+		printf("ReadFileBytes: read the file <%s> \n", name);
+	FILE *fl = fopen(name, "r");
 	fseek(fl, 0, SEEK_END);
 	long len = ftell(fl);
 	//len = 128000; // Haroon's orignal python code use this value, why? 
@@ -239,9 +238,6 @@ int get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
 	TEEC_Operation op;
 	uint32_t origin;
 	TEEC_Result res;
-	
-	// Read the firmware file. 
-	
 
 	// Set the parameters
 	int m = gv_sw_m;
@@ -250,15 +246,13 @@ int get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
 	char challenge[key_sz];
 	strncpy(challenge, key, key_sz);
 	int challengeInt[key_sz];
-	printf("SWATT: Challenge string is <%s>\n", challenge);
-	
-	char *ret = readFileBytes("firmwareSample");
-
-	
+	if (gv_dbug > 1)
+		printf("SWATT: Challenge string is <%s>\n", challenge);
+	// Read the firmware file.
+	char *ret = readFileBytes(gv_flph);
 	// reference func: string_to_list <IOT_ATT.py>
-    for (int t = 0; t < key_sz; t++)
+	for (int t = 0; t < key_sz; t++)
 		challengeInt[t] = (int)challenge[t];
-
 	// reference func: setKey <IOT_ATT.py>
 	for (int i = 0; i < m; i++)
 		state[i] = i;
@@ -270,38 +264,33 @@ int get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
 		state[i] = state[j];
 		state[j] = tmp;
 	}
-
 	// reference func: extract_CRpair <IOT_ATT.py>
 	int s = 1;
-    int k = 16;
-    int final = ((1 << k) - 1) & (puff >> (s - 1));
-    printf("SWATT: final :<%d>\n", final);
-    int test[key_sz];
-    for (int t = 0; t < key_sz; t++)
-        test[t] = challengeInt[t] ^ final;
-
-    for (int t = 0; t < key_sz; t++)
-    {
-        if (t != key_sz - 1)
-            test[t] ^= test[t + 1];
-        final += test[t] << 2;
-    }
-
+	int k = 16;
+	int final = ((1 << k) - 1) & (puff >> (s - 1));
+	if (gv_dbug > 1)
+		printf("SWATT: final :<%d>\n", final);
+	int test[key_sz];
+	for (int t = 0; t < key_sz; t++)
+		test[t] = challengeInt[t] ^ final;
+	for (int t = 0; t < key_sz; t++)
+	{
+		if (t != key_sz - 1)
+			test[t] ^= test[t + 1];
+		final += test[t] << 2;
+	}
 	// Calculate file's address need to access in the trustApp.
 	memset(&op, 0, sizeof(op));
 	op.paramTypes = TEEC_PARAM_TYPES(TEEC_VALUE_INOUT, TEEC_VALUE_INOUT,
 									 TEEC_VALUE_INOUT, TEEC_NONE);
 	// reference func: getSWATT <IOT_ATT.py>
-	int pprev_cs = state[256];
-	int prev_cs = state[257];
-
 	op.params[0].value.a = 0;		   //swatt_seed -> op.params[0].value.a
 	op.params[0].value.b = m;		   //init_seed	-> op.params[0].value.b
 	op.params[1].value.a = 0;		   // Address -> op.params[1].value.a
 	op.params[1].value.b = state[258]; // current_cs -> op.params[1].value.b
 	op.params[2].value.a = state[257]; // prev_cs -> op.params[2].value.a
 	op.params[2].value.b = state[256]; // pprev_cs -> op.params[3].value.b
-
+	// Calculate the SWATT value.
 	for (int i = 0; i < gv_iter; i++)
 	{
 		op.params[0].value.a = final ^ op.params[0].value.b;
@@ -317,7 +306,6 @@ int get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
 			num = m - 1;
 		usleep(20000); // sleep a short while to avoid PI hang.
 		op.params[1].value.b = op.params[1].value.b + ((int)strTemp ^ op.params[2].value.b + state[num]);
-		//printf("R5:<%d>\n", current_cs);
 		res = TEEC_InvokeCommand(&ctx->sess, TA_SWATT_CMD_CAL, &op, &origin);
 		if (res != TEEC_SUCCESS)
 			errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x",
@@ -326,7 +314,8 @@ int get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
 		printProgress((double)i / gv_iter);
 	}
 	printf("Finished\n");
-	printf("SWATT: TA incremented value to %d\n", op.params[1].value.b);
+	if (gv_dbug > 1)
+		printf("SWATT: TA incremented value to %d\n", op.params[1].value.b);
 	return op.params[1].value.b;
 }
 
@@ -338,23 +327,19 @@ void loadConfig()
     char *line = NULL;
     size_t len = 0;
     ssize_t read;
-    char *pch;
 
     fp = fopen("configLocal.txt", "r");
     if (fp == NULL)
     {
-        printf("file open error");
+        printf("Local config file open error.");
         exit(EXIT_FAILURE);
     }
     while ((read = getline(&line, &len, fp)) != -1)
     {
-        //printf("Retrieved line of length %zu:\n", read);
-        //printf("%s\n", line);
         if (line[0] == '#' || line[0] == '\n'|| line[0] == '\r' || line == NULL)
             continue; //remove the comment line
         char message[200];
         strcpy(message, strtok(line, ":"));
-
 		// load program' debug levle from line fmt:<DEBUG:(int)*>
 		if (strstr(message, "DEBUG"))
         {
@@ -373,17 +358,20 @@ void loadConfig()
 					gv_ipAddr[i] = '\0'; //remove the '\n'
 			}
 			if (gv_dbug > 1)
-				printf("IP addresss is: <%s>\n", gv_ipAddr);
+				printf("Server IP addresss is: <%s>\n", gv_ipAddr);
 		}
 		// load checked program' path from line <FILEP:(str)***>
 		else if (strstr(message, "FILEP"))
         {
             strcpy(gv_flph, strtok(NULL, ":"));
-			for (int i = 0; i < strlen(gv_ipAddr); i++)
+			for (int i = 0; i < strlen(gv_flph); i++)
 			{
 				if (gv_flph[i] == '\r' || gv_flph[i] == '\n')
 					gv_flph[i] = '\0'; //remove the '\n'
 			}
+			if (gv_dbug > 1)
+				printf("The file need to check is: <%s>\n", gv_flph);
+
 		}
 		// load the TCP port number from line <PORTN:(int)**> 
         else if (strstr(message, "PORTN"))
@@ -457,12 +445,10 @@ void display(char *ciphertext, int len, int debugLvl)
 	if(debugLvl == 0)
 		return; // don't display anything if debug level == 0 
 	printf("len: %d \n", len);
-	if(debugLvl == 1)
+	if(debugLvl <= 1)
 		return; // only display data len if debug level == 1
 	for (int v = 0; v < len; v++)
-	{
 		printf("%d ", ciphertext[v]);
-	}
 	printf("\n");
 }
 //-------------------------------------------------------------------------------
@@ -511,7 +497,7 @@ int main(void)
 	printf("TCP: send the fetch request \n");
 	char rbuff[AES_TEST_BUFFER_SIZE]; 
 	bzero(rbuff, sizeof(rbuff));
-	sprintf(rbuff, "F;%d;%d;%d;%d;%d;%d;", gv_keyV, gv_gwID, gv_proV, gv_cLen, gv_sw_m, gv_iter);
+	sprintf(rbuff, "F%d;%d;%d;%d;%d;%d;", gv_keyV, gv_gwID, gv_proV, gv_cLen, gv_sw_m, gv_iter);
 	write(sockfd, rbuff, sizeof(rbuff));
 	// get the cyphtext from the server.
 	bzero(ciph, sizeof(ciph)); 
@@ -577,13 +563,67 @@ int main(void)
 	display(ciph, sizeof(ciph), gv_dbug);
 	printf("--------------------------------------\n");
 
-	// Step 5: Send to server and close the socket
+	// Step 5: Send encrypted val to server and decrypt the  response.
 	printf("TCP: send the encrypted swatt data\n");
 	write(sockfd, ciph, sizeof(ciph));
-	close(sockfd);
+
+	// wait for request.
+	bzero(ciph, sizeof(ciph)); 
+	read(sockfd, ciph, sizeof(ciph));
+	printf("TCP: get <%d>Bytes ciphtext from server: \n", sizeof(ciph));
+	printf("Prepare AES decode operation(AES_D)\n");
+	prepare_aes(&ctx, DECODE);
+
+	printf("AES_D:Load key inside TA\n");
+	memset(key, 0xa5, sizeof(key)); // load some value as key(hard code)
+	set_key(&ctx, key, AES_TEST_KEY_SIZE);
+	display(key, sizeof(key), gv_dbug);
+
+	printf("AES_D: Reset ciphering operation IV in TA \n");
+	memset(iv, 0xa5, sizeof(iv)); /* Load some dummy value */
+	set_iv(&ctx, iv, AES_TEST_IV_SIZE);
+	display(iv, sizeof(iv), gv_dbug);
+
+	printf("AES_D: Decrypte ciphtext buffer from TA\n");
+	cipher_buffer(&ctx, ciph, temp, AES_TEST_BUFFER_SIZE); // challenge-> temp
+	//printf("DC: This is the challenge: %X\n",temp );
+	display(temp, sizeof(temp), gv_dbug);
+
+	// Step 6: Send the system lib/memory used by the checked program.
+	if (temp[0] == 'T')
+	{
+		printf("The swatt value has been verified by the server.\n");
+
+		FILE *cmdfp;
+		char data[FILENAME_MAX];
+		char cmd[100];
+		sprintf(cmd, "lsof -c %s;", gv_flph);
+		cmdfp = popen(cmd, "r");
+
+		char var[40];
+		while (fgets(var, sizeof(var), cmdfp) != NULL)
+		{
+			if (gv_dbug > 1)
+				printf("- %s", var);
+			var[strlen(var) - 1] = ';'; // replace the '\n' with ';'
+			strcat(data, var);
+		}
+		pclose(cmdfp);
+		char data2[FILENAME_MAX];
+		sprintf(data2, "F%s;", data);
+		// Send the response back to the server.
+		write(sockfd, data2, sizeof(data2));
+	}
+	else
+	{
+		printf("The swatt value was not verified by the server.\n Remove he un-verfied file.\n");
+		/*Do what need to do to if the file have been changed.*/
+		write(sockfd, "FF;", sizeof("FF;")); //
+	}
 	printf("--------------------------------------\n");
 
-	// Step 6: terminate the TA session.
+	// Step 7: Close the TCP socket and terminate the TA session.
+	close(sockfd);
 	terminate_tee_session(&ctx);
 	return 0;
 }
