@@ -209,9 +209,10 @@ void cipher_buffer(struct test_ctx *ctx, char *in, char *out, size_t sz)
 // Read firmware file as bytes array.
 char *readFileBytes(const char *name)
 {	
+	printf("xxxxx\n");
 	if (gv_dbug > 1)
-		printf("Read the file <%s>", name);
-	FILE *fl = fopen(name, "r");
+		printf("Read the file <%s>", gv_flph);
+	FILE *fl = fopen(gv_flph, "r");
 	fseek(fl, 0, SEEK_END);
 	long len = ftell(fl);
 	//len = 128000; // Haroon's orignal python code use this value, why? 
@@ -239,6 +240,9 @@ int get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
 	uint32_t origin;
 	TEEC_Result res;
 	
+	// Read the firmware file. 
+	
+
 	// Set the parameters
 	int m = gv_sw_m;
 	int state[m];
@@ -248,8 +252,8 @@ int get_swatt(struct test_ctx *ctx, char *key, size_t key_sz)
 	int challengeInt[key_sz];
 	printf("SWATT: Challenge string is <%s>\n", challenge);
 	
-	// Read the firmware file. 
 	char *ret = readFileBytes("firmwareSample");
+
 	
 	// reference func: string_to_list <IOT_ATT.py>
     for (int t = 0; t < key_sz; t++)
@@ -346,9 +350,9 @@ void loadConfig()
     {
         //printf("Retrieved line of length %zu:\n", read);
         //printf("%s\n", line);
-        if (line[0] == '#' || line[0] == '\n' || line == NULL)
+        if (line[0] == '#' || line[0] == '\n'|| line[0] == '\r' || line == NULL)
             continue; //remove the comment line
-        char message[20];
+        char message[200];
         strcpy(message, strtok(line, ":"));
 
 		// load program' debug levle from line fmt:<DEBUG:(int)*>
@@ -356,23 +360,30 @@ void loadConfig()
         {
             gv_dbug = 0;
             gv_dbug = atoi(strtok(NULL, ":"));
-            printf("Currently program debug print level is: %d \n", gv_dbug);
+            printf("Currently program debug print level is: <%d>\n", gv_dbug);
         }
 		// load ip address from line <TCPIP:(str)***.***.***.***>
 		else if (strstr(message, "TCPIP"))
         {
             strcpy(gv_ipAddr, strtok(NULL, ":"));
-            gv_ipAddr[strlen(gv_ipAddr) - 1] = '\0'; //remove the '\n'
+			// remove the \r or \n or \r\n
+			for (int i = 0; i < strlen(gv_ipAddr); i++)
+			{
+				if (gv_ipAddr[i] == '\r' || gv_ipAddr[i] == '\n')
+					gv_ipAddr[i] = '\0'; //remove the '\n'
+			}
 			if (gv_dbug > 1)
-				printf("IP addresss is: %s \n", gv_ipAddr);
+				printf("IP addresss is: <%s>\n", gv_ipAddr);
 		}
 		// load checked program' path from line <FILEP:(str)***>
 		else if (strstr(message, "FILEP"))
         {
             strcpy(gv_flph, strtok(NULL, ":"));
-            gv_flph[strlen(gv_flph) - 1] = '\0'; //remove the '\n'
-			if (gv_dbug > 1)
-				printf("Checked program is: %s \n", gv_flph);
+			for (int i = 0; i < strlen(gv_ipAddr); i++)
+			{
+				if (gv_flph[i] == '\r' || gv_flph[i] == '\n')
+					gv_flph[i] = '\0'; //remove the '\n'
+			}
 		}
 		// load the TCP port number from line <PORTN:(int)**> 
         else if (strstr(message, "PORTN"))
@@ -380,7 +391,7 @@ void loadConfig()
             gv_port = 5007;
             gv_port = atoi(strtok(NULL, ":"));
 			if (gv_dbug > 1)
-				printf("port is: %d \n", gv_port);
+				printf("port is: <%d>\n", gv_port);
 		}
 		// load checked program version from line <P_VER:(int)*>
         else if (strstr(message, "P_VER"))
@@ -388,7 +399,7 @@ void loadConfig()
             gv_proV = 0;
             gv_proV = atoi(strtok(NULL, ":"));
 			if (gv_dbug > 1)
-            	printf("program version is: %d \n", gv_proV);
+            	printf("program version is: <%d>\n", gv_proV);
         }
 		// load AES key version from line <K_VER:(int)*>
         else if (strstr(message, "K_VER"))
@@ -396,7 +407,7 @@ void loadConfig()
             gv_keyV = 0;
             gv_keyV = atoi(strtok(NULL, ":"));
             if (gv_dbug > 1)
-				printf("key version is: %d \n", gv_keyV);
+				printf("key version is: <%d>\n", gv_keyV);
         }
 		// load gate way id/SWATT PUFF from line <GW_ID:(int)*>
         else if (strstr(message, "GW_ID"))
@@ -404,7 +415,7 @@ void loadConfig()
             gv_gwID = SWATT_PUFF;
             gv_gwID = atoi(strtok(NULL, ":"));
             if (gv_dbug > 1)
-				printf("Gate way ID is: %d \n", gv_gwID);
+				printf("Gate way ID is: <%d>\n", gv_gwID);
         }
 		// load swatt challenge string length from line <C_LEN:(int)*> 
         else if (strstr(message, "C_LEN"))
@@ -414,7 +425,7 @@ void loadConfig()
             if (gv_cLen > 16)
                 gv_cLen = 16;
             if (gv_dbug > 1)
-				printf("challenge Len : %d \n", gv_cLen);
+				printf("challenge Len : <%d>\n", gv_cLen);
         }
 		// load SWATT init m from line <SWA_M:(int)*>
         else if (strstr(message, "SWA_M"))
@@ -422,7 +433,7 @@ void loadConfig()
             gv_sw_m = 300; // use 300 as default.
             gv_sw_m = atoi(strtok(NULL, ":"));
             if (gv_dbug > 1)
-				printf("SWATT init m is: %d \n", gv_sw_m);
+				printf("SWATT init m is: <%d>\n", gv_sw_m);
         }
 		// load SWATT init m from line <SWA_M:(int)*>
         else if (strstr(message, "SWA_N"))
@@ -430,7 +441,7 @@ void loadConfig()
             gv_iter = 100; // use 100 as defualt.
             gv_iter = atoi(strtok(NULL, ":"));
             if (gv_dbug > 1)
-            	printf("SWATT iteration n is: %d \n", gv_iter);
+            	printf("SWATT iteration n is: <%d>\n", gv_iter);
         }
     }
     fclose(fp);
