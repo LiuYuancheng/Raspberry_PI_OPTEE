@@ -1,13 +1,21 @@
-# Raspbian_OPTEE_AP
 #Raspbian_OPTEE_AP
 ---
 This project is aim to create a trust Client<=>Server program to verify whether a execuable program on Raspberry PI 3 has modified by other people. 
 
-The main feature used in the project are:
+#####The main feature used in the project are:
 - Set OPTEE on Rasperry PI mode 3(trustZone under Raspian);
 - Client<=> Server communication: AES encryption/decryption by trustApplication.
 - Calculate the executable program in IOT and calcualte the file's SWATT value independently in client and server, then do the comparasion.
 - Get the execuable program execution information such as (cmd run the program, checked program process ID, execution user, related file Descriptor, memory size+offset, node info, system lib file name). Then send the information to server.
+#####The Program executing flow diagram:
+![](https://github.com/LiuYuancheng/Raspbian_OPTEE_AP/blob/master/doc/Design_flowChart/optee_client_server_2019_06_20.png)
+
+#####The project we followed/used/learn to finished the project
+- [OPTEE trustZone on Rasperry PI: OP-TEE](https://github.com/OP-TEE/optee_os)
+- [Raspbian with OP-TEE Support: benhaz1024](https://github.com/benhaz1024/raspbian-tee)
+- [Example of make a trustApplication: linaro-swg](https://github.com/linaro-swg/hello_world)
+- [IOT SW-ATT file signature calculation](https://ieeexplore.ieee.org/document/8443995)
+
 
 
 We follow benhaz1024's project[https://github.com/benhaz1024/raspbian-tee] to learn &amp; implement a trust APP.
