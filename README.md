@@ -1,32 +1,33 @@
 # Raspbian_OPTEE_AP
 ---
 ### Introduction
-This project is aim to create a trust Client<=>Server program to verify whether a execuable program on Raspberry PI 3 has modified by other people. 
+This project is aimed to create a trustClient and a server program to verify whether a execuable program on Raspberry PI Mode 3 has been modified by other people. 
 
 ##### The main feature used in the project are:
 - Set OPTEE on Rasperry PI mode 3(trustZone under Raspian);
-- Client<=> Server communication: AES encryption/decryption by trustApplication.
-- Calculate the executable program in IOT and calcualte the file's SWATT value independently in client and server, then do the comparasion.
-- Get the execuable program execution information such as (cmd run the program, checked program process ID, execution user, related file Descriptor, memory size+offset, node info, system lib file name). Then send the information to server.
-##### The Program executing flow diagram:
+- Client <=> Server communication: AES encryption/decryption by trustApplication;
+- Calcualte the IOT file's SWATT value independently in client and server, then do the comparasion;
+- Get the execuable program's execution information under Raspbian such as (cmd run the program, checked program process ID, execution user, related file descriptor, memory size+offset, node info, system lib file name). Then send the information to server.
+
+##### The program executing flow diagram:
 ![](https://github.com/LiuYuancheng/Raspbian_OPTEE_AP/blob/master/doc/Design_flowChart/optee_client_server_2019_06_20.png)
 
-##### The project we followed/used/learn to finished the project
-- [OPTEE trustZone on Rasperry PI: OP-TEE](https://github.com/OP-TEE/optee_os)
+##### The project we followed/used/learn to finished the project:
+- [OPTEE trustZone on Rasperry PI Mode 3: OP-TEE](https://github.com/OP-TEE/optee_os)
 - [Raspbian with OP-TEE Support: benhaz1024](https://github.com/benhaz1024/raspbian-tee)
 - [Example of make a trustApplication: linaro-swg](https://github.com/linaro-swg/hello_world)
 - [IOT SW-ATT file signature calculation](https://ieeexplore.ieee.org/document/8443995)
 - [Linear congruential random generator](https://rosettacode.org/wiki/Linear_congruential_generator)
 ---
-### Setup Project
+### Setup and Run Project
 
 ##### Step 1: Prepare the Raspberry PI mode 3 with Raspberry system installed: 
 Dev Env:  Windows 10/7
-1. Insert the 16GB SD card in the windows machine and use “SD Memory card formatter” to format the SD card.  Download the SD memory card formatter from https://www.sdcard.org/downloads/formatter/  and follow all the default setting.
-1. Down load the Raspberry PI Raspbian OS(32-bit) from https://www.raspberrypi.org/downloads/raspbian/
-1. Download the FlashFlawless from https://www.balena.io/etcher/ and flash the Raspbian image in to the SD card, put the SD card in Raspberry PI to double confirm the it works normally. 
+1. Insert the 16GB SD card in the windows machine and use “SD Memory card formatter” to format the SD card. Download the SD memory card formatter from https://www.sdcard.org/downloads/formatter/ and follow all the default setting.
+1. Download the Raspberry PI Raspbian OS(32-bit) from https://www.raspberrypi.org/downloads/raspbian/
+1. Download the FlashFlawless from https://www.balena.io/etcher/ and flash the Raspbian image in to the SD card, put the SD card in Raspberry PI to double confirm it works normally. 
 
-##### Step 2: Build the Raspbian with OPTEE enable
+##### Step 2: Build the Raspbian with OPTEE enabled
 1. Install the packages that need to be installed to start with to make OPTEE:
 	```html
 	$ sudo apt-get install android-tools-adb android-tools-fastboot autoconf \
@@ -37,7 +38,7 @@ Dev Env:  Windows 10/7
         mtools netcat python-crypto python-serial python-wand unzip uuid-dev \
         xdg-utils xterm xz-utils zlib1g-dev
 	```
-Follow the link<https://optee.readthedocs.io/building/devices/rpi3.html> to do the step 1 - 5. 
+Follow the link <https://optee.readthedocs.io/building/devices/rpi3.html> to do the step 1 - 5. 
 1. Download the Cross Build Toolchain[AARCH64 & AARCH32 both needed, and AARCH32 must > 6.0 from linaro] from link: https://releases.linaro.org/components/toolchain/binaries/
 ![](https://github.com/LiuYuancheng/Raspbian_OPTEE_AP/blob/master/doc/2019-05-29_095400.png)
 1. Install the build tool package:
@@ -60,3 +61,12 @@ Follow the link<https://optee.readthedocs.io/building/devices/rpi3.html> to do t
 	$ make
 	```
 1. Copy the file to the system and test: 1. Copy the **host\hello_world** to **\media\user\rootfs\bin** folder and copy the **ta\7aaaf200-2450-11e4-abe2-0002a5d5c51b.ta** to **\media\user\rootfs\lib\optee_armtz\** folder.
+
+##### Step 4: Run the TrustClient
+1. Download the TrustClient project and do the same thing as step3.
+1. Build the Project and copy the TrustClient in the Raspberry PI SD card. 
+1. Copy the server program in the home folder of the  Raspberry PI SD card
+1. 
+
+
+
