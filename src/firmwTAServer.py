@@ -132,7 +132,7 @@ class firmwTAServer(object):
            
         self.swattHd.setIterationNum(int(n))
         # Calcualte the SWATT value for verification.
-        result = self.swattHd.getSWATT(self.challengeStr, int(m), "firmwareSample")
+        result = self.swattHd.getSWATT(self.challengeStr, int(m), "ran")
         result = int(result, 0) # hex string to int.
         print ('TA_Server:  SWATT result<%s>' % str(result))
         
