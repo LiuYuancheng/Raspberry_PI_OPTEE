@@ -7,13 +7,12 @@
 # Author:      Mohamed Haroon Basheer, edit by LYC
 #
 # Created:     2019/05/06
-# Copyright:
-# License:
+# Copyright:   NUS – Singtel Cyber Security Research & Development Laboratory
+# License:     YC @ NUS
 # -----------------------------------------------------------------------------
 import os
 import random
 import string
-#from uuid import getnode as get_mac
 RAN_FLAG = True #Flag to decide wehter we ues Linear congruential generator(BSD)
 DE_PUFF = 154946511204680
 
@@ -33,69 +32,69 @@ class swattCal(object):
     """ This module is used to provide a SWATT calculator to get the input file's 
         swatt value.
     """
-    # -----------------------------------------------------------------------------
+# --swattCal-------------------------------------------------------------------
     def __init__(self):
         self.state = None
         self.puffVal = DE_PUFF  # DEFAULT PUFF VALUE FOR EACH DEVICE
         self.iterM = 0  # swatt iteration time.
 
-    # -----------------------------------------------------------------------------
+# --swattCal-------------------------------------------------------------------
     def bitExtracted(self, number, k, s):
-        """ Extract specified length of bits """
+        """ Extract specified length of bits."""
         return (((1 << k) - 1)  &  (number >> (s-1) ) )
 
-    # -----------------------------------------------------------------------------
+# --swattCal-------------------------------------------------------------------
     def extract_CRpair(self, challenegeStr):
-        """ Extract challenege response pair for the given key and iteration """
+        """ Extract challenege response pair for the given key and iteration."""
         #final = self.bitExtracted( <= this caused SWATT val different on different divice.
         #    get_mac(), 16, 1)  # UNIQUE PUFF VALUE FOR EACH DEVICE
         final = self.bitExtracted(self.puffVal, 16, 1)
         test = [(ord(k) ^ final) for k in challenegeStr]
-        for idx in range(len(test)):
-            if(idx != len(test)-1): test[idx] ^= test[idx+1]
+        for idx in range(len(test)-1):
+            test[idx] ^= test[idx+1]
             final += test[idx] << 2
         return final
 
-    #-----------------------------------------------------------------------------
+ # --swattCal-------------------------------------------------------------------
     def randomChallStr(self, stringLength=10):
-        """Generate a random chanllenge string of fixed length """
+        """ Generate a random chanllenge string of fixed length."""
         letters = string.ascii_lowercase
         return ''.join(random.choice(letters) for i in range(stringLength))
 
-    # -----------------------------------------------------------------------------
-    def setKey(self, key,m):
-        """RC4 Key Scheduling Algorithm (KSA)"""
+# --swattCal-------------------------------------------------------------------
+    def setKey(self, key, m):
+        """ RC4 Key Scheduling Algorithm (KSA)."""
         j, self.state, = 0, list(range(m)) #[n for n in range(m)]#fill with numnber ranging from 0 to 255
         for i in range(m):
             j = (j + self.state[i] + key[i % len(key)]) % m
             self.state[i], self.state[j] = self.state[j], self.state[i]
 
-    # -----------------------------------------------------------------------------
+# --swattCal-------------------------------------------------------------------
     def setPuff(self, puff):
-        """ Set the PUFF seed value. puff must be a int"""
+        """ Set the PUFF seed value. puff must be a int."""
         if not isinstance(puff, int):
             print("The puff<%s> must be a int type" % puff)
             return
         self.puffVal = puff
 
-    # -----------------------------------------------------------------------------
+# --swattCal-------------------------------------------------------------------
     def setIterationNum(self, iterationNum):
-        """ Set the SWATT iteration loop time"""
-        if iterationNum<= 0: return
+        """ Set the SWATT iteration loop time."""
+        if iterationNum <= 0: return
         self.iterM = iterationNum
         
-    # -----------------------------------------------------------------------------
+# --swattCal-------------------------------------------------------------------
     def string_to_list(self, inputString):
-        """Convert a string into a byte list"""
+        """Convert a string into a byte list."""
         return [ord(c) for c in inputString] #returns the corresponding unicode integer for the char for ex; a==97
 
-    # -----------------------------------------------------------------------------
+# --swattCal-------------------------------------------------------------------
     def getSWATT(self, challengeStr, m, filePath):
         """ Calculate the file swatt value based on the input challenge string
             and the iterative count. 
         """
         if not os.path.exists(filePath):
-            print("The file <%s> is not exist" % filePath)
+            print("The file <%s> is not exist." % filePath)
             return None
         with open(filePath, "rb") as fh:
             self.setKey(self.string_to_list(challengeStr), m)
@@ -107,7 +106,6 @@ class swattCal(object):
             pprev_cs, prev_cs, current_cs = self.state[256:259]
             init_seed = m  # set x(i-1)
             # print init_cs.bit_length(),bin(init_cs),init_cs
-
             iterNum = self.iterM if self.iterM > 0 else m
             for i in range(iterNum):
                 swatt_seed = cr_response ^ init_seed  # y(i-1)=p(c) xor x(i-1)
@@ -116,20 +114,20 @@ class swattCal(object):
                 #use python PRG to generate address Range
                 if RAN_FLAG:
                     randGen = bsd_rand(Address)
-                    Address = randGen()%128000+1
+                    Address = randGen() % 128000+1
                 else:
                     random.seed(Address)
-                    Address = random.randint(1, 128000) #YC: why only check 128000 bytes? 
+                    # YC: why only check 128000 bytes?
+                    Address = random.randint(1, 128000)
                 # read the EEPROM Memory content
                 fh.seek(Address)
                 strTemp = fh.read(1)
                 # print(Address)
                 #calculate checksum at the location
-                #if not strTemp: continue  # jump over the empty str ""
+                # if not strTemp: continue  # jump over the empty str ""
+                num = ord(strTemp) if len(strTemp) != 0 else 0
                 # current_cs=current_cs+(ord(strTemp[0])^pprev_cs+state[i-1])
-                num = ord(strTemp) if len(strTemp)!=0 else 0
-                current_cs = current_cs + \
-                    (num ^ pprev_cs+self.state[i-1])
+                current_cs = current_cs + (num ^ pprev_cs+self.state[i-1])
                 # extra seed for the SWATT
                 init_seed = current_cs+swatt_seed
                 # update current_cs
@@ -143,11 +141,11 @@ class swattCal(object):
 # -----------------------------------------------------------------------------
 # Lib function test case(we will do this in the future.)
 def testCase():
-
     firmwarePath = "".join([os.getcwd(), "\\firmwSign\\firmwareSample"])
     calculator = swattCal()
     print("Start test.")
-    calculator.setPuff(1549465112)
+    puffVal = DE_PUFF
+    calculator.setPuff(puffVal)
     result = calculator.getSWATT("Testing", 300, firmwarePath)
     print(result)
     if result == '0x397d' and not RAN_FLAG:
