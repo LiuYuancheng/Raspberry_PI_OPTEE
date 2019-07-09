@@ -327,7 +327,7 @@ void loadConfig()
     char *line = NULL;
     size_t len = 0;
     ssize_t read;
-
+	printf("I/O: Load program setting from the configuration file.");
     fp = fopen("configLocal.txt", "r");
     if (fp == NULL)
     {
@@ -461,16 +461,16 @@ int main(void)
 	char clear[AES_TEST_BUFFER_SIZE];
 	char ciph[AES_TEST_BUFFER_SIZE];
 	char temp[AES_TEST_BUFFER_SIZE];
+	char sessionKey[AES_TEST_BUFFER_SIZE];
 	 
 	printf("TEE: Prepare TrustZone session with the TA.\n");
 	prepare_tee_session(&ctx);
-	// Step 1: fetch the challenge from the server.
-	printf("--------------------------------------\n");
+	// Step 1: make connection and fetch the AES session key from the server.
+	printf("-------------------------------------------------------------------------------\n");
 	printf("TCP: Init the TCP client.\n");
 	// Init the TCP client
 	int sockfd, connfd;
 	struct sockaddr_in servaddr, cli;
-	// Socket create and varification
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd == -1)
 	{
@@ -480,8 +480,10 @@ int main(void)
 	else
 		printf("TCP: Socket successfully created..\n");
 	bzero(&servaddr, sizeof(servaddr));
+	
 	// Assign TCP IPaddr, PORT(load the setting from the config file.)
 	loadConfig();
+
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = inet_addr(gv_ipAddr);
 	servaddr.sin_port = htons(gv_port);
@@ -492,37 +494,63 @@ int main(void)
 		exit(0);
 	}
 	else
-		printf("TCP: connected to the server..\n"); 
-	// Send challenge fetch request.
-	printf("TCP: send the fetch request \n");
+		printf("TCP: connected to the server..\n");
+	// Send program setting and session key fetch request.
+	printf("TCP: send the session key fetch request.\n");
 	char rbuff[AES_TEST_BUFFER_SIZE]; 
 	bzero(rbuff, sizeof(rbuff));
 	sprintf(rbuff, "F%d;%d;%d;%d;%d;%d;", gv_keyV, gv_gwID, gv_proV, gv_cLen, gv_sw_m, gv_iter);
 	write(sockfd, rbuff, sizeof(rbuff));
-	// get the cyphtext from the server.
+	// get the cyphtext(session key) from the server.
 	bzero(ciph, sizeof(ciph)); 
 	read(sockfd, ciph, sizeof(ciph));
-	printf("TCP: get <%d>Bytes ciphtext from server: \n", sizeof(ciph));
+	printf("TCP: get <%d>Bytes session key ciphtext from server: \n", sizeof(ciph));
 	display(ciph, sizeof(ciph), gv_dbug);
-	printf("--------------------------------------\n");
+	printf("-------------------------------------------------------------------------------\n");
 
-	// Step 2: Decode the message by AES256 and get challenge data.
-	printf("Prepare AES decode operation(AES_D)\n");
+	// Step 2: Decode the session key by AES256 defualt key.
+	printf("TrustZone: Prepare AES decode operation(AES_D)\n");
 	prepare_aes(&ctx, DECODE);
 
-	printf("AES_D:Load key inside TA\n");
+	printf("AES_D: Load default key inside TA.\n");
 	memset(key, 0xa5, sizeof(key)); // load some value as key(hard code)
 	set_key(&ctx, key, AES_TEST_KEY_SIZE);
 	display(key, sizeof(key), gv_dbug);
 
-	printf("AES_D: Reset ciphering operation IV in TA \n");
-	memset(iv, 0xa5, sizeof(iv)); /* Load some dummy value */
+	printf("AES_D: Reset ciphering operation IV in TA.\n");
+	memset(iv, 0xa5, sizeof(iv));	/* Load 32bytes value as IV*/
 	set_iv(&ctx, iv, AES_TEST_IV_SIZE);
 	display(iv, sizeof(iv), gv_dbug);
 
-	printf("AES_D: Decrypte ciphtext buffer from TA\n");
+	printf("AES_D: Decrypt session key ciphtext from TA.\n");
+	cipher_buffer(&ctx, ciph, sessionKey, AES_TEST_BUFFER_SIZE); // challenge-> temp
+	display(sessionKey, sizeof(sessionKey), gv_dbug);
+	// Send the session key set confirmation info to the server.
+	bzero(rbuff, sizeof(rbuff));
+	sprintf(rbuff, "FT");
+	write(sockfd, rbuff, sizeof(rbuff));
+	printf("-------------------------------------------------------------------------------\n");
+
+	// Step 3: Decode the message by AES256 session key and get challenge data.
+	bzero(ciph, sizeof(ciph)); 
+	read(sockfd, ciph, sizeof(ciph));
+	printf("TCP: get <%d> Bytes SWATT-challenge ciphtext from server: \n", sizeof(ciph));
+	display(ciph, sizeof(ciph), gv_dbug);
+	
+	printf("Prepare AES decode operation(AES_D)\n");
+	prepare_aes(&ctx, DECODE);
+
+	printf("AES_D:set session key inside TA\n");
+	set_key(&ctx, sessionKey, AES_TEST_KEY_SIZE);
+	display(sessionKey, sizeof(sessionKey), gv_dbug);
+
+	printf("AES_D: Reset ciphering operation IV in TA \n");
+	memset(iv, 0xa5, sizeof(iv));	/* Load 32bytes value as IV*/
+	set_iv(&ctx, iv, AES_TEST_IV_SIZE);
+	display(iv, sizeof(iv), gv_dbug);
+
+	printf("AES_D: Decrypt SWATT-challenge ciphtext buffer from TA.\n");
 	cipher_buffer(&ctx, ciph, temp, AES_TEST_BUFFER_SIZE); // challenge-> temp
-	//printf("DC: This is the challenge: %X\n",temp );
 	display(temp, sizeof(temp), gv_dbug);
 
 	/* Check decoded is the clear content(only used for) */
@@ -533,73 +561,71 @@ int main(void)
 	//	printf("Clear text and decoded text differ => ERROR\n");
 	//else
 	//	printf("Clear text and decoded text match\n");
-	printf("--------------------------------------\n");
+	printf("-------------------------------------------------------------------------------\n");
 
-	// Step 3: Calcualte the SWATT data from the trust application.
+	// Step 4: Calcualte the SWATT data from the trust application.
 	printf("SWATT: Pass in challenge data and calcualte: \n");
 	int swattVal = get_swatt(&ctx, temp, gv_cLen);
-	printf("--------------------------------------\n");
+	printf("-------------------------------------------------------------------------------\n");
 
-	// Step 4: Encode the SWATT message by AES256 and send to server.
+	// Step 5: Encode the SWATT message by AES256 and send to server.
 	printf("Prepare AES encode operation(AES_E) \n");
 	prepare_aes(&ctx, ENCODE);
 
-	printf("AES_E: Load key in TA\n");
+	printf("AES_E: Load session key in TA.\n");
 	memset(key, 0xa5, sizeof(key)); // load some value as key(hard code)
-	set_key(&ctx, key, AES_TEST_KEY_SIZE);
-	display(key, sizeof(key), gv_dbug);
+	set_key(&ctx, sessionKey, AES_TEST_KEY_SIZE);
+	display(sessionKey, sizeof(sessionKey), gv_dbug);
 
-	printf("AES_E: Reset ciphering operation IV in TA \n");
+	printf("AES_E: Reset ciphering operation IV in TA.\n");
 	memset(iv, 0xa5, sizeof(iv)); /* Load some dummy value */
 	set_iv(&ctx, iv, AES_TEST_IV_SIZE);
 	display(iv, sizeof(iv), gv_dbug);
 
-	printf("AES_E: Encore chanllenge data buffer from TA\n");
+	printf("AES_E: Encode challenge data buffer from TA.\n");
 	memset(clear, 0x5a, sizeof(clear)); /* Load some dummy value */
-	snprintf(clear, 10, "%d", swattVal);
-	printf("SWATT int val:<%s> \n", clear);
-	cipher_buffer(&ctx, clear, ciph, AES_TEST_BUFFER_SIZE);
-	//printf("AES_E: This is the ciphtext %X\n",ciph );
+	snprintf(clear, 10, "%d", swattVal); // copy int in to string
+	if (gv_dbug > 0)
+		printf("SWATT int val:<%s> \n", clear);
+	cipher_buffer(&ctx, clear, ciph, AES_TEST_BUFFER_SIZE);	
 	display(ciph, sizeof(ciph), gv_dbug);
-	printf("--------------------------------------\n");
+	printf("-------------------------------------------------------------------------------\n");
 
-	// Step 5: Send encrypted val to server and decrypt the  response.
-	printf("TCP: send the encrypted swatt data\n");
+	// Step 6: Send encrypted val to server and decrypt the  response.
+	printf("TCP: send the encrypted swatt data.\n");
 	write(sockfd, ciph, sizeof(ciph));
 
-	// wait for request.
+	// wait for server verification reuslt.
 	bzero(ciph, sizeof(ciph)); 
 	read(sockfd, ciph, sizeof(ciph));
-	printf("TCP: get <%d>Bytes ciphtext from server: \n", sizeof(ciph));
-	printf("Prepare AES decode operation(AES_D)\n");
+	printf("TCP: get <%d> Bytes server verification ciphtext from server.\n", sizeof(ciph));
+	printf("Prepare AES decode operation(AES_D).\n");
 	prepare_aes(&ctx, DECODE);
 
-	printf("AES_D:Load key inside TA\n");
-	memset(key, 0xa5, sizeof(key)); // load some value as key(hard code)
-	set_key(&ctx, key, AES_TEST_KEY_SIZE);
-	display(key, sizeof(key), gv_dbug);
+	printf("AES_D:Load session key inside TA.\n");
+	set_key(&ctx, sessionKey, AES_TEST_KEY_SIZE);
+	display(sessionKey, sizeof(sessionKey), gv_dbug);
 
-	printf("AES_D: Reset ciphering operation IV in TA \n");
-	memset(iv, 0xa5, sizeof(iv)); /* Load some dummy value */
+	printf("AES_D: Reset ciphering operation IV in TA.\n");
+	memset(iv, 0xa5, sizeof(iv)); /* Load 32bytes value as IV*/
 	set_iv(&ctx, iv, AES_TEST_IV_SIZE);
 	display(iv, sizeof(iv), gv_dbug);
 
-	printf("AES_D: Decrypte ciphtext buffer from TA\n");
+	printf("AES_D: Decrypte ciphtext buffer from TA.\n");
 	cipher_buffer(&ctx, ciph, temp, AES_TEST_BUFFER_SIZE); // challenge-> temp
-	//printf("DC: This is the challenge: %X\n",temp );
 	display(temp, sizeof(temp), gv_dbug);
+	printf("-------------------------------------------------------------------------------\n");
 
-	// Step 6: Send the system lib/memory used by the checked program.
+	// Step 7: Send the system lib/memory used by the checked program.
 	if (temp[0] == 'T')
 	{
 		printf("The swatt value has been verified by the server.\n");
-
 		FILE *cmdfp;
 		char data[FILENAME_MAX];
 		char cmd[100];
 		sprintf(cmd, "lsof -c %s;", gv_flph);
 		cmdfp = popen(cmd, "r");
-
+		
 		char var[40];
 		while (fgets(var, sizeof(var), cmdfp) != NULL)
 		{
@@ -620,7 +646,7 @@ int main(void)
 		/*Do what need to do to if the file have been changed.*/
 		write(sockfd, "FF;", sizeof("FF;")); //
 	}
-	printf("--------------------------------------\n");
+	printf("-------------------------------------------------------------------------------\n");
 
 	// Step 7: Close the TCP socket and terminate the TA session.
 	close(sockfd);
