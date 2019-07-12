@@ -100,7 +100,7 @@ int getSWATT(char challengeB[], int cSize, int m, int n, int puff)
     int current_cs = state[258];
     int init_seed = m;
     int swatt_seed = 0; 
-    for (int i = 0; i < 100; i++)
+    for (int i = 0; i < n; i++)
     {
         swatt_seed = cr_response ^ init_seed;
         int Address = (state[i] << 8) + prev_cs;
