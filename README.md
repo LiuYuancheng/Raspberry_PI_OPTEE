@@ -1,18 +1,19 @@
-# Raspbian_OPTEE_AP
----
+# Raspbian_OPTEE_Attestation_Program
 ### Introduction
-This project is aimed to create a trustClient and a server program to verify whether a execuable program on Raspberry PI Mode 3 has been modified by other people. 
+This project is aimed to create a trustClient by using the "ARM Trust Zone" technique to do the local file attestation and use it to communicate with the server program to verify whether a executable program on IOT gateway (Raspberry PI Mode 3) has been modified by attacker. 
 
-##### The main feature used in the project are:
-- Set OPTEE on Rasperry PI mode 3(trustZone under Raspian);
-- Client <=> Server communication: AES encryption/decryption by trustApplication;
-- Calcualte the IOT file's SWATT value independently in client and server, then do the comparasion;
-- Get the execuable program's execution information under Raspbian such as (cmd run the program, checked program process ID, execution user, related file descriptor, memory size+offset, node info, system lib file name). Then send the information to server.
+###### **Main feature used in the project**
 
-##### The program executing flow diagram:
-![](https://github.com/LiuYuancheng/Raspbian_OPTEE_AP/blob/master/doc/Design_flowChart/optee_client_server_2019_06_20.png)
+- Set Open Portable Trusted Execution Environment on Raspberry PI mode 3 (Trust Zone under Raspbian). 
+- Client and Server communication: TCP with AES encryption/decryption by trust_Application. 
+- Calculate the IOT file's SWATT value independently in both client's trust Zone and server part, then do the result comparison. 
+- Get the running program's execution information under Raspbian such as program process ID, execution user, related file descriptor, memory size+offset, node info and related system lib file name. Then send all the information to server for further check.
 
-##### The project we followed/used/learn to finished the project:
+###### Program executing flow diagram
+
+![](doc/Design_flowChart/optee_client_server_2019_06_20.png)
+
+###### Related project we followed/used/learn to finished the project
 - [OPTEE trustZone on Rasperry PI Mode 3: OP-TEE](https://github.com/OP-TEE/optee_os)
 - [Raspbian with OP-TEE Support: benhaz1024](https://github.com/benhaz1024/raspbian-tee)
 - [Example of make a trustApplication: linaro-swg](https://github.com/linaro-swg/hello_world)
