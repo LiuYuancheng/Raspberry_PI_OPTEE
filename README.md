@@ -53,6 +53,7 @@ Follow the link <https://optee.readthedocs.io/building/devices/rpi3.html> to do 
 	```
 ##### Step 3: Create a new Trust Application and run in the Raspbian with OPTEE
 1. Down load the OPTEE trust example from https://github.com/linaro-swg/hello_world and put the folder in the raspbian-optee folder. 
+
 1. Define the toolchains and environment variables with all 32-bit setting and make:
 	```html
 	$ export TEEC_EXPORT=$PWD/../optee_client/out/export
@@ -61,22 +62,38 @@ Follow the link <https://optee.readthedocs.io/building/devices/rpi3.html> to do 
 	$ export TA_DEV_KIT_DIR=$PWD/../optee_os/out/arm/export-ta_arm32
 	$ make
 	```
+	
 1. Copy the file to the system and test: 1. Copy the **host\hello_world** to **\media\user\rootfs\bin** folder and copy the **ta\7aaaf200-2450-11e4-abe2-0002a5d5c51b.ta** to **\media\user\rootfs\lib\optee_armtz\** folder.
 
-##### Step 4: Run the Trust_Client
+1. File system structure : 
+
+![](doc/2019-05-29_113640.png)
+
+------
+
+#### Program Execution
+
+##### Run the Trust_Client
+
 1. Download the Trust_Client project and do the same thing as step3.
 
 1. Build the Project and copy the TrustClient in the Raspberry PI SD card. 
 
 1. Copy the server program in the home folder of the  Raspberry PI SD card
 
-   File system structure: 
+1. Copy the **host\hello_world** to **\media\user\rootfs\bin** folder 
 
-   ![](doc/2019-05-29_113640.png)
+1. Copy the **ta\ 7aaaf200-2450-11e4-abe2-0002a5d5c51b.ta** to **\media\user\rootfs\lib\optee_armtz** 
+
+1. Boot the Raspberry PI and check the result:
+
+   ![](doc/trustclientResult.png)
 
 1. 
 
 ------
 
-### Program execution
+> Last edit by LiuYuancheng(liu_yuan_cheng@hotmail.com) at 30/01/2020
+
+### 
 
