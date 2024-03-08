@@ -1,90 +1,87 @@
 # Trust Zone/Env (OPTEE) on Raspberry PI
-**Project Design**: The primary objective of this project is aim to use the Raspberry PI to build a "trust IOT device" which use the ARM trust Zone technology to protect the critical data ( such communication channel encryption keys) and program (IoT firmware) against the information leakage and firmware attack. In this project we will use the lib OPTEE lib to build the Trusted Execution Environment (TEE) on a Raspberry PI and add our Firmware attestation code as a trust_Client running in the trust zone verify whether a executable program on IOT (Raspberry PI Mode 3) has been modified by attacker. 
+**Project Design**: The primary goal of this project is to utilize the Raspberry Pi as the foundation platform for constructing a secure "Trust IoT device", employing ARM TrustZone technology to protect critical data such as encryption keys for communication channels and IoT firmware attestation program from potential information leaks and firmware attacks. To achieve this, we will develop a "Trust Client" program and utilize the [OPTEE (Open Portable Trusted Execution Environment)](https://www.trustedfirmware.org/projects/op-tee/) library to establish a Trusted Execution Environment (TEE) on the Raspberry Pi 3+. The Trust functions will run within this TEE to ensure security. The firmware attestation code will be integrated into a trust function running within the TrustZone, to verify the integrity of the executable firmware on the IoT device (Raspberry Pi Model 3).
 
-The Trust Client contents 2 section: 
+The Trust Client program on the Raspberry Pi consists of three key sections:
 
-- Communication part: this part will running on the Normal World which used to send the information to the IoT control Hub. 
-- Firmware attestation part: this part will running in the secure world which contents the RSA message encryption key, the firmware attestation algorithm code.
+- **Normal World Program**: This segment operates within the Application level Normal World, handling most program functions, facilitating the transmission of information to the IoT control Hub, and passing data to the trust function in the Secure World.
+- **Trust Zone Constants**: All critical information and parameters, such as firmware attestation results, Device identification UDID, and RSA encryption keys, will be stored as constants in the Secure World for the trust function's usage.
+- **Trust Functions**: This component operates within the Secure World, containing essential secure function code, such as message RSA encryption, Arm chip UDID verification code, and the attestation algorithm function, to mitigate the risk of reverse engineering attacks.
+
+The general system workflow is shown below:
+
+![](doc/img/generalWorkflow.png)
+
+```
+version:     v0.1.2
+Copyright:   Copyright (c) 2021 LiuYuancheng
+License:     MIT License  
+```
 
 
+
+**Table of Contents**
+
+[TOC]
+
+------
 
 ### Introduction 
 
-With the development of reverse engineering, the hacker can easily get the source code if they got a Linux based IOT device and split part of the firmware code from then firmware file. For example in this example: we use pyInstaller to compile our program to a raspbian executable file and load the firmware in a raspberry PI to build a motion detection camera, when the hacker get a camera from some where, he can use the pyinstxtractor to unpackaged the firmware and use the uncompyle6 to decompile the fire to get some code. Then after analyze the source code, he can build his own malicious firmware program and implement firmware attack. Even we added the firmware attestation program in the IoT, the hacker can also decompile the firmware attestation to find some way to bypass it. 
+With the advancement of reverse engineering techniques, hackers can easily extract part of source code from Linux-based IoT devices by dissecting the application type firmware files. For instance, consider a scenario where we utilize pyInstaller to compile our CV analysis program into a executable file on Raspbian OS, and deploy it on a Raspberry Pi to create a motion detection camera. If a hacker obtains such a camera, they can employ tools like pyinstxtractor to unpack the firmware and then use uncompyle6 to decompile it, thereby gaining access to some part of the source code. Subsequently, armed with this knowledge, they can craft malicious firmware programs to launch attacks. Even if we incorporate a firmware attestation program in our IoT devices, hackers can also attempt to decompile it to identify the vulnerabilities and bypass security measures.
 
-Now we want to move the firmware attestation program into the raspberry PI's arm trust zone so the hacker is not able to decompile the firmware attestation program, we will also save the Arm chip's unique `Device identification UDID`  and our attestation message RSA encryption key in the trust zone so even the hacker clone all the things in another raspberry PI he can not do a replay attack: 
+To mitigate these risks, we propose relocating the critical functions (such as the firmware attestation logic) to the Raspberry Pi's ARM TrustZone. By doing so, we render the attestation program immune to decompilation attempts by hackers. Additionally, we will securely store the Arm chip's unique `Device identification UDID` and our attestation message RSA encryption key within the TrustZone. The ARM chip verification program operating within the TrustZone will retrieve the ARM's `Device identification UDID` and compare it with stored records. If they do not match, the attestation process will fail. So, even if a hacker clones all components onto another Raspberry Pi, they will be unable to execute a replay attack.
 
-The ARM chip verification program will get the  ARM's `Device identification UDID` and compare with its record, if they are not match return the attestation fail. 
-
-The attestation result will be encrypted in the trust environment with the encrypt key stored in the trust zone, so the hacker will not able to decrypt the message from the IoT hub server and do the MITM attack.
+Furthermore, the attestation result will be encrypted within the trust environment using the encryption key stored in the TrustZone. This ensures that even if hackers intercept communication between the IoT hub server and the device, they will be unable to decrypt the messages and launch a Man-in-the-Middle (MITM) attack.
 
 
 
-### Introduction
+------
 
-This project is aimed to create a trust_Client by using the "ARM Trust Zone" technique to do the local file attestation and use it to communicate with the server program to verify whether a executable program on IOT gateway (Raspberry PI Mode 3) has been modified by attacker. 
-
-
+### Background Knowledge
 
 
 
-What is trust Zone
+#### ARM Trust Zone
 
-TrustZone is a technology developed by ARM Holdings that provides hardware-based security features on ARM-based processors. It creates two separate execution environments: the "Normal World" and the "Secure World". These environments run concurrently on the same processor, but with different levels of access and privileges.
+TrustZone is a technology developed by ARM Holdings that provides hardware-based security features on ARM-based processors. It creates two separate execution environments: the "Normal World" and the "Secure World". These environments run concurrently on the same processor, but with different levels of access and privileges. Each world operates independently, with its own set of resources, privileges, and execution environments. Here's a basic overview of how ARM TrustZone works:
 
 1. **Normal World**: This is where the regular operating system (such as Android, Linux, or other RTOS) runs along with user applications. It operates in a non-secure state and has access to regular resources and memory.
 2. **Secure World**: This is a separate, isolated environment that runs a trusted operating system, often called a "Secure Monitor" or "Secure Kernel". The Secure World has higher privileges and access to secure resources such as cryptographic functions, secure storage, and secure boot mechanisms. It ensures that critical system functions and sensitive data are protected from unauthorized access or tampering.
 
 TrustZone technology enables secure boot, secure storage, secure communication channels, and secure execution environments for applications that require high levels of security, such as mobile payment systems, digital rights management (DRM), and enterprise security solutions. It provides a foundation for building trusted execution environments (TEEs) where sensitive operations can be performed with a high degree of assurance against attacks.
 
+Reference: https://www.arm.com/technologies/trustzone-for-cortex-m#:~:text=Arm%20TrustZone%20technology%20is%20used,to%20as%20the%20secure%20monitor
 
 
-Relationship between trust zone and trust environment.
 
-TrustZone technology is the underlying hardware-based security architecture developed by ARM, which provides the foundation for creating a Trusted Execution Environment (TEE). The TEE is a secure area within the TrustZone environment where trusted applications can run with higher levels of security and confidentiality.
+#### Trust Execution Environment and OP-TEE
 
-Here's how they are related:
-
-1. **TrustZone**: TrustZone divides the ARM processor into two separate worlds: Normal World and Secure World. TrustZone provides hardware-based isolation and protection mechanisms to ensure that the Secure World operates independently of the Normal World. It establishes a secure execution environment for critical security functions and trusted applications.
-2. **Trusted Execution Environment (TEE)**: The TEE is a secure area within the Secure World of the TrustZone environment. It is a trusted operating environment that provides isolation and protection for sensitive operations and applications. TEE offers a secure runtime environment where trusted applications, such as secure payment solutions, digital rights management (DRM) systems, and secure authentication mechanisms, can run with confidentiality, integrity, and reliability.
+**Trusted Execution Environment (TEE)**: The Trusted Execution Environment (TEE) is a secure area within the TrustZone environment where trusted applications can run with higher levels of security and confidentiality. TrustZone divides the ARM processor into two separate worlds: Normal World and Secure World. The TEE is  a secure execution environment for running critical security functions and trusted applications in the Secure World. It is a trusted operating environment that provides isolation and protection for sensitive operations and applications. TEE offers a secure runtime environment where trusted applications, such as secure payment solutions, digital rights management (DRM) systems, and secure authentication mechanisms, can run with confidentiality, integrity, and reliability.
 
 In essence, TrustZone provides the hardware support necessary to create a secure execution environment, while the TEE utilizes this environment to run trusted applications and execute critical security functions. The TEE leverages the security features provided by TrustZone, such as hardware isolation, secure boot, secure storage, and secure communication channels, to ensure the confidentiality and integrity of sensitive data and operations.
 
+OP-TEE is a Trusted Execution Environment (TEE) designed as companion to a non-secure Linux kernel running on Arm; Cortex-A cores using the TrustZone technology. OP-TEE implements TEE Internal Core API v1.1.x which is the API exposed to Trusted Applications and the TEE Client API v1.0, which is the API describing how to communicate with a TEE. Those APIs are defined in the GlobalPlatform API specifications.
+
+Reference: https://www.trustedfirmware.org/projects/op-tee/
 
 
 
+#### How TrustZone Ensures Security
+
+Accessing data stored in the TrustZone storage is highly challenging for hackers due to the robust security mechanisms in place. TrustZone provides hardware-enforced isolation between the Normal World and the Secure World, ensuring that data stored in the Secure World is protected from unauthorized access.
+
+Here are some reasons why it's difficult for a hacker to access data saved in the TrustZone storage:
+
+1. **Hardware Isolation**: TrustZone utilizes hardware-enforced isolation mechanisms to separate the Normal World and the Secure World. This prevents code running in the Normal World from directly accessing or tampering with data stored in the Secure World.
+2. **Secure Boot**: TrustZone supports secure boot mechanisms, ensuring that only authenticated and trusted code can be loaded and executed in the Secure World. This prevents unauthorized code from accessing data stored in the TrustZone storage.
+3. **Secure Storage**: Data stored in the TrustZone storage is encrypted and protected by cryptographic algorithms. Even if a hacker manages to gain access to the physical memory, they would still need to decrypt the data, which is typically challenging without the appropriate cryptographic keys.
+4. **Secure Monitor**: The Secure Monitor, a trusted piece of firmware responsible for managing transitions between the Normal World and the Secure World, helps ensure the integrity and security of data stored in the TrustZone storage.
+
+While it's theoretically possible for sophisticated attackers to exploit vulnerabilities in TrustZone or the Secure Monitor firmware, doing so would require significant expertise, resources, and access to specialized equipment. Additionally, manufacturers continuously work to improve the security of TrustZone and address any discovered vulnerabilities through software updates and patches. Overall, TrustZone provides a high level of security for data stored in the Secure World, making it extremely difficult for hackers to access.
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-###### **Main feature used in the project**
+###### Main feature used in the project
 
 - Set Open Portable Trusted Execution Environment on Raspberry PI mode 3 (Trust Zone under Raspbian). 
 - Client and Server communication: TCP with AES encryption/decryption by trust_Application. 
