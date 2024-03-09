@@ -95,6 +95,26 @@ While it's theoretically possible for sophisticated attackers to exploit vulnera
 
 ### Project Design
 
+The trust firmware attestation program will flow below steps to do one firmware attestation. 
+
+1.  Device verification and server connection 
+
+
+
+#### Device Verification and Server Connection
+
+During initialization of the Trust Client program, the trust firmware attestation module loads the IoT configuration file and registers IoT information with the Trust server. This allows the server to prepare the attestation key and parameters accordingly. Subsequently, the program reads the Raspberry Pi's ARM chip's `Device identification UDID` and initiates an OPTEE session to transmit the UDID to the trust environment. If the UDID matches the pre-saved data in the Trust Zone Storage, device verification succeeds, unlocking the PATT firmware attestation functions for next step. Conversely, if there is no match, indicating a potential cloning attempt (where a hacker replicates the contents from a legitimate IoT onto a new Raspberry Pi), the trust function considers the IoT as unauthorized. Consequently, it rejects any further OPTEE connection requests from the Normal World. The workflow of the device verification is shown blow:
+
+![](doc/img/deviceVerify.png)
+
+In the event that the server does not receive the encrypted device validation message within the specified timeout period after IoT registration, it flags the IoT device as high risk or compromised.
+
+
+
+
+
+
+
 
 
 
