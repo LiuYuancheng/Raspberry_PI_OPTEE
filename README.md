@@ -1,15 +1,15 @@
 # Trust Zone/Env (OPTEE) on Raspberry PI
 **Project Design**: The primary goal of this project is to utilize the Raspberry Pi as the foundation platform for constructing a secure "Trust IoT device", employing ARM TrustZone technology to protect critical data such as encryption keys for communication channels and IoT firmware attestation program from potential information leaks and firmware attacks. To achieve this, we will develop a "Trust Client" program and utilize the [OPTEE (Open Portable Trusted Execution Environment)](https://www.trustedfirmware.org/projects/op-tee/) library to establish a Trusted Execution Environment (TEE) on the Raspberry Pi 3+. The Trust functions will run within this TEE to ensure security. The firmware attestation code will be integrated into a trust function running within the TrustZone, to verify the integrity of the executable firmware on the IoT device (Raspberry Pi Model 3).
 
-The Trust Client program on the Raspberry Pi consists of three key sections:
+The system consists of two primary components:
 
-- **Normal World Program**: This segment operates within the Application level Normal World, handling most program functions, facilitating the transmission of information to the IoT control Hub, and passing data to the trust function in the Secure World.
-- **Trust Zone Constants**: All critical information and parameters, such as firmware attestation results, Device identification UDID, and RSA encryption keys, will be stored as constants in the Secure World for the trust function's usage.
-- **Trust Functions**: This component operates within the Secure World, containing essential secure function code, such as message RSA encryption, Arm chip UDID verification code, and the attestation algorithm function, to mitigate the risk of reverse engineering attacks.
+- **Trust Firmware Attestation Server**: This server program operates on the IoT control hub (cloud) side. It is responsible for transmitting encrypted PATT (Physics-based Attestation) requests and parameters to the corresponding Trust Client. Subsequently, it verifies the response from the Trust Client to determine if the IoT device has been compromised.
 
-The general system workflow is shown below:
+- **Trust Firmware Attestation Client**: The Trust Client program is deployed on the IoT device (Raspberry Pi) and operates within both the Normal World and the TrustZone. The communication module in the Normal World forwards encrypted messages from the Trust Firmware Attestation Server to the secure world function. Subsequently, it performs the PATT check for the target Firmware/Application program based on the server's request. Upon completion, the Trust Client sends the encrypted result back to the server for verification.
 
-![](doc/img/generalWorkflow.png)
+The System overview is shown below:
+
+![](doc/img/overview.png)
 
 ```
 version:     v0.1.2
@@ -31,7 +31,17 @@ With the advancement of reverse engineering techniques, hackers can easily extra
 
 To mitigate these risks, we propose relocating the critical functions (such as the firmware attestation logic) to the Raspberry Pi's ARM TrustZone. By doing so, we render the attestation program immune to decompilation attempts by hackers. Additionally, we will securely store the Arm chip's unique `Device identification UDID` and our attestation message RSA encryption key within the TrustZone. The ARM chip verification program operating within the TrustZone will retrieve the ARM's `Device identification UDID` and compare it with stored records. If they do not match, the attestation process will fail. So, even if a hacker clones all components onto another Raspberry Pi, they will be unable to execute a replay attack.
 
-Furthermore, the attestation result will be encrypted within the trust environment using the encryption key stored in the TrustZone. This ensures that even if hackers intercept communication between the IoT hub server and the device, they will be unable to decrypt the messages and launch a Man-in-the-Middle (MITM) attack.
+Furthermore, the attestation result will be encrypted within the trust environment using the encryption key stored in the TrustZone. This ensures that even if hackers intercept communication between the IoT hub server and the device, they will be unable to decrypt the messages and launch a Man-in-the-Middle (MITM) attack. 
+
+The general trust client workflow is shown below:
+
+![](doc/img/generalWorkflow.png)
+
+The Trust Client program on the Raspberry Pi consists of three key sections:
+
+- **Normal World Program**: This segment operates within the Application level Normal World, handling most program functions, facilitating the transmission of information to the IoT control Hub, and passing data to the trust function in the Secure World.
+- **Trust Storage Constants**: All critical information and parameters, such as firmware attestation results, Device identification UDID, and RSA encryption keys, will be stored as constants in the Secure World for the trust function's usage.
+- **Trust Execution Functions**: This component operates within the Secure World, containing essential secure function code, such as message RSA encryption, Arm chip UDID verification code, and the attestation algorithm function, to mitigate the risk of reverse engineering attacks.
 
 
 
@@ -78,6 +88,18 @@ Here are some reasons why it's difficult for a hacker to access data saved in th
 4. **Secure Monitor**: The Secure Monitor, a trusted piece of firmware responsible for managing transitions between the Normal World and the Secure World, helps ensure the integrity and security of data stored in the TrustZone storage.
 
 While it's theoretically possible for sophisticated attackers to exploit vulnerabilities in TrustZone or the Secure Monitor firmware, doing so would require significant expertise, resources, and access to specialized equipment. Additionally, manufacturers continuously work to improve the security of TrustZone and address any discovered vulnerabilities through software updates and patches. Overall, TrustZone provides a high level of security for data stored in the Secure World, making it extremely difficult for hackers to access.
+
+
+
+------
+
+### Project Design
+
+
+
+
+
+
 
 
 
