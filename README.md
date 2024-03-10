@@ -1,5 +1,5 @@
 # Trust Zone/Env (OPTEE) on Raspberry PI
-**Project Design**: The primary goal of this project is to utilize the Raspberry Pi as the foundation platform for constructing a secure "Trust IoT device", employing ARM TrustZone technology to protect critical data such as encryption keys for communication channels and IoT firmware attestation program from potential information leaks and firmware attacks. To achieve this, we will develop a "Trust Client" program and utilize the [OPTEE (Open Portable Trusted Execution Environment)](https://www.trustedfirmware.org/projects/op-tee/) library to establish a Trusted Execution Environment (TEE) on the Raspberry Pi 3+. The Trust functions will run within this TEE to ensure security. The firmware attestation code will be integrated into a trust function running within the TrustZone, to verify the integrity of the executable firmware on the IoT device (Raspberry Pi Model 3).
+**Project Design**: The primary goal of this project is to utilize the Raspberry Pi as the foundation platform for constructing a secure "Trust IoT device", employing ARM TrustZone technology to protect critical data such as encryption keys for communication channels and IoT firmware attestation program from potential information leaks and firmware attacks. To achieve this, we will develop a "Trust Client" program and utilize the [OPTEE (Open Portable Trusted Execution Environment)](https://www.trustedfirmware.org/projects/op-tee/) library to establish a Trusted Execution Environment (TEE) on the Raspberry Pi 3B+. The Trust functions will run within this TEE to ensure security. The firmware attestation code will be integrated into a trust function running within the TrustZone, to verify the integrity of the executable firmware on the IoT device (Raspberry Pi Model 3).
 
 The system consists of two primary components:
 
@@ -23,13 +23,35 @@ License:     MIT License
 
 [TOC]
 
+- [Trust Zone/Env (OPTEE) on Raspberry PI](#trust-zone-env--optee--on-raspberry-pi)
+    + [Introduction](#introduction)
+    + [Background Knowledge](#background-knowledge)
+      - [ARM Trust Zone](#arm-trust-zone)
+      - [Trust Execution Environment and OP-TEE](#trust-execution-environment-and-op-tee)
+      - [How TrustZone Ensures Security](#how-trustzone-ensures-security)
+    + [Project Design](#project-design)
+      - [Device Verification and Server Connection](#device-verification-and-server-connection)
+      - [Verification Result Upload and Firmware Attestation Parameters Fetch](#verification-result-upload-and-firmware-attestation-parameters-fetch)
+      - [Running PATT Firmware Attestation and Uploading the Result](#running-patt-firmware-attestation-and-uploading-the-result)
+      - [Project Main Technical Feature and Reference](#project-main-technical-feature-and-reference)
+    + [Program Setup](#program-setup)
+        * [Hardware Need](#hardware-need)
+        * [Step 1: Prepare Raspberry PI (mode 3) with Raspbian system installed:](#step-1--prepare-raspberry-pi--mode-3--with-raspbian-system-installed-)
+        * [Step 2: Build the Raspbian with Trust Environment enabled](#step-2--build-the-raspbian-with-trust-environment-enabled)
+        * [Step 3: Create a new OPTEE Trust Application and Test](#step-3--create-a-new-optee-trust-application-and-test)
+      - [Program Execution](#program-execution)
+      - [Build the Trust Client](#build-the-trust-client)
+    + [Problem and Solution](#problem-and-solution)
+
+`version v0.1.2`
+
 ------
 
 ### Introduction 
 
 With the advancement of reverse engineering techniques, hackers can easily extract part of source code from Linux-based IoT devices by dissecting the application type firmware files. For instance, consider a scenario where we utilize pyInstaller to compile our CV analysis program into a executable file on Raspbian OS, and deploy it on a Raspberry Pi to create a motion detection camera. If a hacker obtains such a camera, they can employ tools like pyinstxtractor to unpack the firmware and then use uncompyle6 to decompile it, thereby gaining access to some part of the source code. Subsequently, armed with this knowledge, they can craft malicious firmware programs to launch attacks. Even if we incorporate a firmware attestation program in our IoT devices, hackers can also attempt to decompile it to identify the vulnerabilities and bypass security measures.
 
-To mitigate these risks, we propose relocating the critical functions (such as the firmware attestation logic) to the Raspberry Pi's ARM TrustZone. By doing so, we render the attestation program immune to decompilation attempts by hackers. Additionally, we will securely store the Arm chip's unique `Device identification UDID` and our attestation message RSA encryption key within the TrustZone. The ARM chip verification program operating within the TrustZone will retrieve the ARM's `Device identification UDID` and compare it with stored records. If they do not match, the attestation process will fail. So, even if a hacker clones all components onto another Raspberry Pi, they will be unable to execute a replay attack.
+To mitigate these risks, we propose relocating the critical functions (such as the firmware attestation logic) to the Raspberry Pi's ARM TrustZone. By doing so, we render the attestation program immune to de-compilation attempts by hackers. Additionally, we will securely store the Arm chip's unique `Device identification UDID` and our attestation message RSA encryption key within the TrustZone. The ARM chip verification program operating within the TrustZone will retrieve the ARM's `Device identification UDID` and compare it with stored records. If they do not match, the attestation process will fail. So, even if a hacker clones all components onto another Raspberry Pi, they will be unable to execute a replay attack.
 
 Furthermore, the attestation result will be encrypted within the trust environment using the encryption key stored in the TrustZone. This ensures that even if hackers intercept communication between the IoT hub server and the device, they will be unable to decrypt the messages and launch a Man-in-the-Middle (MITM) attack. 
 
@@ -95,11 +117,15 @@ While it's theoretically possible for sophisticated attackers to exploit vulnera
 
 ### Project Design
 
-The trust firmware attestation program will flow below three steps to do one firmware attestation. 
+The trust firmware attestation program follows the workflow diagram outlined below, which we'll break down into three distinct steps to illustrate a single round of firmware attestation:
 
-1.  Device verification and server connection 
-2.  Verification Result upload and firmware attestation parameters fetch
-3.   Run PATT firmware attestation and upload the result
+![](doc/img/workflow.png)
+
+1. **Device Verification and Server Connection**: In this initial step, the program verifies the device and establishes a connection with the server. It involves authenticating the server's integrity and ensuring mutual trust between the device and the server.
+2. **Verification Result Upload and Firmware Attestation Parameters Fetch**: Following the device verification, the program uploads the verification result to the server and retrieves firmware attestation parameters. This step is crucial for obtaining necessary data and instructions to proceed with the firmware attestation process.
+3. **Run PATT Firmware Attestation and Upload the Result**: Finally, the program executes the firmware attestation algorithm using the fetched parameters. It then uploads the attestation result to the server for verification. This step ensures the integrity of the firmware and enhances the overall security of the device.
+
+
 
 #### Device Verification and Server Connection
 
@@ -121,7 +147,7 @@ The Trust Client will take 3 Steps to upload the chip verification result to ser
 
 **Step2**: Upon receiving the encrypted data, the server decrypts the message to extract IoT firmware information. It then extracts the `random number #1` from the IoT trust function, appends another 256-bit random number ( `random number #2` ), and includes all PATT execution parameters (such as the random memory address start seed) to generate the firmware attestation request string. This request string is also encrypted using RSA2048 before being dispatched to the Trust Client.
 
-**Step3**: Upon receiving the encrypted firmware attestation from the Trust Client's communication module, the Trust environment decrypts the message. The Trust function then verifies whether the message contains the random number(`random number #1`) it generated, thereby authenticating the server's identity and thwarting potential replay attacks by hackers attempting to exploit outdated server 
+**Step3**: Upon receiving the encrypted firmware attestation from the Trust Client's communication module, the Trust environment decrypts the message. The Trust function then verifies whether the message contains the random number(`random number #1`) it generated, thereby authenticating the server's identity and thwarting potential replay attacks by hackers attempting to exploit outdated server.
 
 
 
@@ -160,10 +186,6 @@ Related Reference Document or project we followed/used/learn to finished the pro
 - Physics-based Attestation of Control Systems paper link: https://www.usenix.org/system/files/raid2019-ghaeini.pdf
 
 
-
-###### Program executing flow diagram
-
-![](doc/Design_flowChart/optee_client_server_2019_06_20.png)
 
 
 ---
@@ -229,8 +251,6 @@ $ make
 
 
 
-
-
 ##### Step 3: Create a new OPTEE Trust Application and Test
 
 3.1 Copy the configure OPTEE file to the Raspberry PI Raspbian OS boot folder
@@ -279,7 +299,11 @@ Now we can setup our firmware attestation trust client on the Raspberry PI.
 
 #### Program Execution
 
-Before we compile our trust function, we need to get the Raspberry PI's Arm chip's UDIP, run the below simple python program to get the ID:
+#### Build the Trust Client
+
+**Step 1: Setup the device verification constant**
+
+We can modify the OPTEE trust example from https://github.com/linaro-swg/hello_world to build our trust client. Before we compile our trust function, we need to get the Raspberry PI's Arm chip's UDIP, run the below simple python program to get the ID:
 
 ```
 import subprocess
@@ -299,33 +323,63 @@ if __name__ == "__main__":
     print("Raspberry Pi UDID:", raspberry_pi_uuid)
 ```
 
-Then we hard code the 
+Ensure you have the necessary permissions to access `/proc/cpuinfo` when running this script. Additionally, note that the CPU serial number may vary depending on the Raspberry Pi model and hardware revisions.
+
+Then we hard code the Arm Chip UDID as a constant in the trust client's source code file `main.c` After change the host `main.c` and `ta\hello_world_ta.c` program We need to set the trust function's UUID in the file to make ta not conflict with the existed ta, set a UUID in the `ta\Android.mk` and  `ta\Makefile`
+
+```
+LOCAL_PATH := $(call my-dir)
+
+local_module_UUID := 7aaaf200-2450-11e4-abe2-0002a5d5c51b.ta
+include $(BUILD_OPTEE_MK)
+```
+
+To generate the UUID, you can use this online tool: https://www.uuidgenerator.net/
 
 
 
+**Step 2: Build the Project and copy the TrustClient in the Raspberry PI SD card**
+
+Define the toolchains and environment variables with all 32bit setting and compile the trust application: 
+
+```
+export TEEC_EXPORT=$PWD/../optee_client/out/export
+export HOST_CROSS_COMPILE=$[The arm-linux-gnueabihf position in <2.2> ]/aarch32/bin/arm-linux-gnueabihf-
+export TA_CROSS_COMPILE=$[The arm-linux-gnueabihf position in <2.2> /aarch32/bin/arm-linux-gnueabihf-
+export TA_DEV_KIT_DIR=$PWD/../optee_os/out/arm/export-ta_arm32
+make
+```
+
+Copy the normal world execution file to Raspbian OS bin folder, from  `host\hello_world` to `\media\user\rootfs\bin` folder 
+
+Copy the trust function binary file `ta\ 7aaaf200-2450-11e4-abe2-0002a5d5c51b.ta` to `\media\user\rootfs\lib\optee_armtz` 
+
+Boot the Raspberry PI and check the result:
+
+![](doc/img/trustclientResult.png)
 
 
-##### Run the Trust_Client
 
-1. Download the Trust_Client project and do the same thing as step3.
+Set the Config file and run the normal world trust client python wrapper:
 
-1. Build the Project and copy the TrustClient in the Raspberry PI SD card. 
+```
+python3 IOT_Att.py
+```
 
-1. Copy the server program in the home folder of the  Raspberry PI SD card
+ At server side, run the attestation trust server program
 
-1. Copy the **host\hello_world** to **\media\user\rootfs\bin** folder 
+```
+python3 firmwTAServer.py
+```
 
-1. Copy the **ta\ 7aaaf200-2450-11e4-abe2-0002a5d5c51b.ta** to **\media\user\rootfs\lib\optee_armtz** 
 
-1. Boot the Raspberry PI and check the result:
 
-   ![](doc/trustclientResult.png)
+------
 
-1. 
+### Problem and Solution
+
+Refer to `doc/ProblemAndSolution.md`
 
 ------
 
 > Last edit by LiuYuancheng(liu_yuan_cheng@hotmail.com) at 30/01/2020
-
-### 
-
