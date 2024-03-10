@@ -165,7 +165,7 @@ Related Reference Document or project we followed/used/learn to finished the pro
 
 ![](doc/Design_flowChart/optee_client_server_2019_06_20.png)
 
-###### 
+
 ---
 ### Program Setup 
 
@@ -182,15 +182,13 @@ Dev Env:  Windows 10/7
 
 1.1 Insert the 16GB SD card in the windows machine and use “SD Memory card formatter” to format the SD card. Download the SD memory card formatter from https://www.sdcard.org/downloads/formatter/ and follow all the default setting.
 
-1.2 Down load the Raspberry PI Raspbian OS(32-bit) from https://www.raspberrypi.org/downloads/raspbian/
+1.2 Down load the Raspberry PI Raspbian OS(32-bit) from https://www.raspberrypi.org/downloads/raspbian/ ()
 
 1.3 Download the FlashFlawless from https://www.balena.io/etcher/ and flash the Raspbian image in to the SD card, put the SD card in Raspberry PI to double confirm the it works normally.
 
 
 
-
-
-##### Step 2: Build the Raspbian with OPTEE enabled
+##### Step 2: Build the Raspbian with Trust Environment enabled
 2.1 Install the packages that need to be installed to start with to make OPTEE:
 
 ```html
@@ -202,34 +200,49 @@ $ sudo apt-get install android-tools-adb android-tools-fastboot autoconf \
      mtools netcat python-crypto python-serial python-wand unzip uuid-dev \
      xdg-utils xterm xz-utils zlib1g-dev
 ```
-2.2 Dowload the Raspbian OPTEE project from link:
-https://github.com/benhaz1024/raspbian-tee
-Download the Cross Build Toolchain:
-AARCH64 & AARCH32 both needed, and AARCH32 must > 6.0 from linaro:
+2.2 Download and install the Cross Build Toolchain:
+Lib `AARCH64` & `AARCH32` are both needed, and `AARCH32` version must > 6.0 from linaro official web :
 https://releases.linaro.org/components/toolchain/binaries/
-Download these 2: “arm-linux-gnueabihf” and “aarch64-linux-gnu” and set the path in the cofig.mk file:
-![](doc/2019-05-29_095400.png)
+Install the below cross build tool chain: `arm-linux-gnueabihf` and `aarch64-linux-gnu` and set the path in the cmake configuration `config.mk` file:
+![](doc/img/toolchaindownload.png)
 
-2.3 Install the build tools package:
-
-```html
-$ sudo apt-install u-boot-tools
-```
-
-2.4 Download the Raspbian with OPTEE support project and follow the steps in link: https://github.com/benhaz1024/raspbian-tee and set up the config file(Config.mk) as:
+2.3 Download the Raspbian with OPTEE support project and follow the steps in link: https://github.com/benhaz1024/raspbian-tee and set up the config file(Config.mk) as:
 
 ```html
 export CROSS_COMPILE := /path/to/your/linaro/aarch32/bin/arm-linux-gnueabihf-
 export CROSS_COMPILE_AARCH64 := /path/to/your/linaro/aarch64/bin/aarch64-linux-gnu-
 ```
 
+2.4 Install the build tools package:
+
+```html
+$ sudo apt-install u-boot-tools
+```
+
+2.5 Build and check the result:
+
+```
+$ ./prepare-env.sh # if your had download all packages, skip this.
+$ make patch # this will patch linux kernel & ATF, if you have done before, skip this.
+$ make
+```
 
 
-##### Step 3: Create a new Trust Application and run in the Raspbian with OPTEE
 
-3.1 Down load the OPTEE trust example from https://github.com/linaro-swg/hello_world and put the folder in the raspbian-optee folder. 
 
-3.2 Define the toolchains and environment variables with all 32-bit setting and make:
+
+##### Step 3: Create a new OPTEE Trust Application and Test
+
+3.1 Copy the configure OPTEE file to the Raspberry PI Raspbian OS boot folder
+
+```
+$ cp ./out/boot/* /media/user/boot
+$ sudo cp -r ./out/rootfs/* /media/user/rootfs
+```
+
+
+
+3.2 Down load the OPTEE simple trust App example from https://github.com/linaro-swg/hello_world and put the folder in the raspbian-optee folder `dev/teepriv #`.  Define the toolchains and environment variables with all 32-bit setting and make:
 
 ```html
 $ export TEEC_EXPORT=$PWD/../optee_client/out/export
@@ -239,15 +252,58 @@ $ export TA_DEV_KIT_DIR=$PWD/../optee_os/out/arm/export-ta_arm32
 $ make
 ```
 
-3.3 Copy the file to the system and test: 1. Copy the **host\hello_world** to **\media\user\rootfs\bin** folder and copy the **ta\7aaaf200-2450-11e4-abe2-0002a5d5c51b.ta** to **\media\user\rootfs\lib\optee_armtz\** folder.
 
-3.4 File system structure : 
 
-![](doc/2019-05-29_113640.png)
+3.3 Copy the file to the system and test: 1. Copy the normal world program `host\hello_world` to `\media\user\rootfs\bin` folder and copy the secure world file to `ta\7aaaf200-2450-11e4-abe2-0002a5d5c51b.ta` to `\media\user\rootfs\lib\optee_armtz\` folder. File system structure of the Raspbian OS boot up folder should be like below : 
+
+![](doc/img/filesStructure.png)
+
+3.4 Put the SD card into the Raspberry PI and boot up. When you login, test whether the number increase function running in the trust environment work:
+
+```
+$ ls /dev/tee*
+/dev/tee0 /dev/teepriv0 # this prove tee driver & optee-os works.
+$ sudo tee-supplicant &
+$ sudo optee_example_hello_world
+```
+
+If in the normal word, the trust function send the data back as below which means the trust environment works normally, the OPTEE has been set successfully: 
+
+![](doc/img/result.png)
+
+Now we can setup our firmware attestation trust client on the Raspberry PI.
+
+
 
 ------
 
 #### Program Execution
+
+Before we compile our trust function, we need to get the Raspberry PI's Arm chip's UDIP, run the below simple python program to get the ID:
+
+```
+import subprocess
+import uuid
+
+def get_raspberry_pi_uuid():
+    # Execute command to get CPU serial number
+    serial = subprocess.check_output(["cat", "/proc/cpuinfo"]).decode().split("\n")[1].split(":")[1].strip()
+    
+    # Generate UUID based on serial number
+    mac = ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff) for elements in range(0,2*6,2)][::-1])
+    mac = mac.replace("ff", "00")
+    return mac + "-" + serial
+
+if __name__ == "__main__":
+    raspberry_pi_uuid = get_raspberry_pi_uuid()
+    print("Raspberry Pi UDID:", raspberry_pi_uuid)
+```
+
+Then we hard code the 
+
+
+
+
 
 ##### Run the Trust_Client
 
